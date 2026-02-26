@@ -13,6 +13,9 @@ import {
   sendProcessingStartNotification,
   sendProcessingCompleteNotification,
   sendProcessingErrorNotification,
+  showOngoingProcessingNotification,
+  updateOngoingProcessingNotification,
+  dismissOngoingProcessingNotification,
 } from '../services/notifications';
 
 type ProcessingContextType = {
@@ -57,6 +60,8 @@ export const ProcessingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       try {
         await sendProcessingStartNotification(job.videoName);
+        // הצג notification דביק בסטטוס בר — מונע מ-Android להרוג את התהליך ברקע
+        await showOngoingProcessingNotification(job.videoName);
 
         // Create temp directory
         tempDir = await createTempDir(job.id);
@@ -93,6 +98,7 @@ export const ProcessingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           progress: 25,
           progressMessage: 'שולח לתמלול (Whisper AI)...',
         });
+        await updateOngoingProcessingNotification('תמלול Whisper', 25);
 
         const srtContent = await transcribeAudio(
           audioChunks,
@@ -116,6 +122,7 @@ export const ProcessingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           progress: 60,
           progressMessage: 'שולח לתרגום (Claude AI)...',
         });
+        await updateOngoingProcessingNotification('תרגום Claude', 60);
 
         const translatedSRT = await translateSRT(
           srtContent,
@@ -142,6 +149,7 @@ export const ProcessingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           progress: 82,
           progressMessage: 'מטמיע כתוביות בסרטון...',
         });
+        await updateOngoingProcessingNotification('טמעת כתוביות', 82);
 
         const isRTL = ['he', 'ar'].includes(job.targetLanguage);
         const outputVideoPath = await burnSubtitles(
@@ -183,6 +191,7 @@ export const ProcessingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         };
 
         updateJob(completedJob);
+        await dismissOngoingProcessingNotification();
         await sendProcessingCompleteNotification(job.videoName);
 
         // Cleanup chunks (not the original audio)
@@ -190,6 +199,9 @@ export const ProcessingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+        // סיים את ה-ongoing notification בכל מקרה (סיום, ביטול, שגיאה)
+        await dismissOngoingProcessingNotification().catch(() => {});
 
         if (errorMessage === 'CANCELLED') {
           updateJob({
