@@ -65,6 +65,27 @@ jobs:
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
 
+      - name: Patch @react-native/gradle-plugin — remove jvmToolchain(17)
+        run: |
+          # jvmToolchain(17) causes "source must not be null" / Internal compiler error
+          # in Kotlin when Gradle's toolchain resolver can't locate JDK 17 in CI.
+          # Safe to remove: JVM target (11) is already set explicitly in compilerOptions,
+          # and Gradle will use the running JDK (17 from setup-java) for compilation.
+          find node_modules/@react-native/gradle-plugin -name "build.gradle.kts" \
+            -exec sed -i 's/kotlin { jvmToolchain(17) }//' {} \;
+          echo "Patched files:"
+          grep -rn "jvmToolchain" node_modules/@react-native/gradle-plugin || echo "No jvmToolchain remaining"
+
+      - name: Patch expo-modules-autolinking — fix Kotlin serialization version
+        run: |
+          # expo-autolinking-plugin-shared uses kotlin("plugin.serialization") version "1.9.24"
+          # but the parent project uses Kotlin 2.1.20 — version mismatch causes null source errors.
+          # The serialization plugin version must match the Kotlin compiler version.
+          sed -i 's/kotlin("plugin.serialization") version "1.9.24"/kotlin("plugin.serialization") version "2.1.20"/' \
+            node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-plugin-shared/build.gradle.kts
+          echo "Patched serialization version:"
+          grep "plugin.serialization" node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-plugin-shared/build.gradle.kts
+
       - name: Install Expo CLI
         run: npm install -g expo-cli @expo/cli eas-cli
 
