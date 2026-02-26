@@ -85,8 +85,12 @@ jobs:
       - name: Build Release APK
         working-directory: android
         run: |
-          ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee gradle-build.log
-          exit ${PIPESTATUS[0]}
+          ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee gradle-build.log; BUILD_EXIT=${PIPESTATUS[0]}
+          if [ $BUILD_EXIT -ne 0 ]; then
+            echo "::error::Gradle build failed. Root cause:"
+            grep -A 5 "Caused by:\|> Task\|error:" gradle-build.log | head -60 || true
+          fi
+          exit $BUILD_EXIT
         env:
           JAVA_OPTS: "-Xmx6144m -XX:MaxMetaspaceSize=1024m"
 
