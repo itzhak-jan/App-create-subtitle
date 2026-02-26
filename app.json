@@ -56,7 +56,8 @@
             "compileSdkVersion": 35,
             "targetSdkVersion": 35,
             "ndkVersion": "27.1.12297006",
-            "newArchEnabled": false
+            "newArchEnabled": false,
+            "kotlinVersion": "2.1.20"
           }
         }
       ],
