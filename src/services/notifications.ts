@@ -3,6 +3,9 @@ import { Platform } from 'react-native';
 
 export const BACKGROUND_TASK_NAME = 'SUBFLOW_BACKGROUND_PROCESSING';
 
+// מזהה קבוע לnotification שרץ ברקע — מאפשר עדכון במקום יצירת חדש
+const ONGOING_NOTIFICATION_ID = 'subflow_ongoing_processing';
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -27,6 +30,16 @@ export const setupNotifications = async (): Promise<void> => {
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 500, 200, 500],
       lightColor: '#4CAF50',
+    });
+
+    // ערוץ שקט לnotification שרץ ברקע — בלי צליל/רטט, רק בסטטוס בר
+    // זה מונע מ-Android להרוג את התהליך כשממוזערים
+    await Notifications.setNotificationChannelAsync('background_processing', {
+      name: 'Background Processing (Ongoing)',
+      importance: Notifications.AndroidImportance.LOW,
+      vibrationPattern: [],
+      lightColor: '#4a90e2',
+      showBadge: false,
     });
   }
 
@@ -95,5 +108,66 @@ export const sendProgressNotification = async (
       },
       trigger: null,
     });
+  }
+};
+
+/**
+ * מציג notification דביק שנשאר בסטטוס בר כל עוד העיבוד רץ.
+ * Android מזהה אפליקציה עם notification פעיל כ"חשובה" ונמנע מלסגור אותה.
+ * קורא לזה בתחילת העיבוד.
+ */
+export const showOngoingProcessingNotification = async (videoName: string): Promise<void> => {
+  try {
+    await Notifications.scheduleNotificationAsync({
+      identifier: ONGOING_NOTIFICATION_ID,
+      content: {
+        title: '🔄 SubFlow מעבד ברקע',
+        body: `${videoName} — לחץ לחזרה לאפליקציה`,
+        sticky: true,      // Android: משתמש לא יכול לדחות את ה-notification
+        autoDismiss: false,
+        data: { type: 'ongoing_processing' },
+        ...(Platform.OS === 'android' ? { channelId: 'background_processing' } : {}),
+      } as Notifications.NotificationContentInput,
+      trigger: null,
+    });
+  } catch {
+    // לא קורסים אם ה-notification נכשל
+  }
+};
+
+/**
+ * מעדכן את ה-notification הרץ עם השלב והאחוז הנוכחיים.
+ * קורא לזה עם כל שינוי משמעותי (כל שלב, כל ~10%).
+ */
+export const updateOngoingProcessingNotification = async (
+  step: string,
+  progress: number
+): Promise<void> => {
+  try {
+    await Notifications.scheduleNotificationAsync({
+      identifier: ONGOING_NOTIFICATION_ID,
+      content: {
+        title: `🔄 SubFlow — ${step}`,
+        body: `${progress}% הושלמו`,
+        sticky: true,
+        autoDismiss: false,
+        data: { type: 'ongoing_processing', progress },
+        ...(Platform.OS === 'android' ? { channelId: 'background_processing' } : {}),
+      } as Notifications.NotificationContentInput,
+      trigger: null,
+    });
+  } catch {
+    // בשקט
+  }
+};
+
+/**
+ * מסיר את ה-notification הרץ — קורא לזה בסיום או ביטול עיבוד.
+ */
+export const dismissOngoingProcessingNotification = async (): Promise<void> => {
+  try {
+    await Notifications.dismissNotificationAsync(ONGOING_NOTIFICATION_ID);
+  } catch {
+    // בשקט
   }
 };
