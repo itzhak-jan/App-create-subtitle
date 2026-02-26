@@ -72,6 +72,15 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
+      - name: Configure Gradle properties for CI
+        run: |
+          # Help Gradle find JDK 17 toolchain via JAVA_HOME (needed by @react-native/gradle-plugin jvmToolchain(17))
+          echo "org.gradle.java.installations.fromEnv=JAVA_HOME" >> android/gradle.properties
+          # Disable auto-download to prevent Gradle from trying to fetch JDK from internet
+          echo "org.gradle.java.installations.auto-download=false" >> android/gradle.properties
+          # Set JVM args for Gradle daemon
+          echo "org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8" >> android/gradle.properties
+
       - name: Cache Gradle dependencies
         uses: actions/cache@v4
         with:
@@ -87,12 +96,15 @@ jobs:
         run: |
           ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee gradle-build.log; BUILD_EXIT=${PIPESTATUS[0]}
           if [ $BUILD_EXIT -ne 0 ]; then
-            echo "::error::Gradle build failed. Root cause:"
-            grep -A 5 "Caused by:\|> Task\|error:" gradle-build.log | head -60 || true
+            echo "::error::Gradle build failed. Full error section:"
+            # Extract from FAILURE block to end of file (up to 150 lines)
+            grep -n "FAILURE\|What went wrong\|Caused by\|compileKotlin\|BUILD FAILED" gradle-build.log | tail -30 || true
+            echo "--- Last 80 lines of build log ---"
+            tail -80 gradle-build.log || true
           fi
           exit $BUILD_EXIT
         env:
-          JAVA_OPTS: "-Xmx6144m -XX:MaxMetaspaceSize=1024m"
+          JAVA_OPTS: "-Xmx4096m -XX:MaxMetaspaceSize=1024m"
 
       - name: Sign APK (debug keystore for CI)
         working-directory: android
