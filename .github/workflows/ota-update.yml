@@ -1,0 +1,40 @@
+name: OTA Update (EAS)
+
+# רץ על כל push ל-main — מפרסם bundle חדש לכל המכשירים
+# שיש עליהם את האפליקציה מותקנת. ללא צורך בהתקנה מחדש.
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  ota-update:
+    name: Publish OTA Update
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+
+      - name: Publish OTA update (preview channel)
+        run: |
+          eas update \
+            --branch main \
+            --message "Auto update from commit ${{ github.sha }} — ${{ github.event.head_commit.message }}" \
+            --non-interactive
+        env:
+          # הוסף את הסוד הזה ב: GitHub repo → Settings → Secrets → EXPO_TOKEN
+          # קבל טוקן ב: https://expo.dev/accounts/[username]/settings/access-tokens
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
