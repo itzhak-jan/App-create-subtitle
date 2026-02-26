@@ -120,15 +120,15 @@ jobs:
 
       - name: Configure Gradle properties for CI
         run: |
-          # Help Gradle find JDK 17 toolchain via JAVA_HOME (needed by @react-native/gradle-plugin jvmToolchain(17))
+          # Ensure file ends with a newline before appending — expo prebuild may not add one,
+          # which causes the next echo to concatenate onto the last line (e.g. kotlinVersion=2.1.20org.gradle...)
+          printf '\n' >> android/gradle.properties
           echo "org.gradle.java.installations.fromEnv=JAVA_HOME" >> android/gradle.properties
-          # Disable auto-download to prevent Gradle from trying to fetch JDK from internet
           echo "org.gradle.java.installations.auto-download=false" >> android/gradle.properties
-          # Set JVM args for Gradle — large heap for Kotlin compilation
           echo "org.gradle.jvmargs=-Xmx6144m -XX:MaxMetaspaceSize=2048m -Dfile.encoding=UTF-8" >> android/gradle.properties
-          # Force Kotlin compiler to run in-process (same JVM as Gradle) instead of a separate worker
-          # This prevents "Internal compiler error" OOM crashes in Kotlin worker processes
           echo "kotlin.compiler.execution.strategy=in-process" >> android/gradle.properties
+          echo "--- android/gradle.properties ---"
+          cat android/gradle.properties
 
       - name: Cache Gradle dependencies
         uses: actions/cache@v4
