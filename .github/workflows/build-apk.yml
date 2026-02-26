@@ -32,6 +32,18 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Configure global Gradle properties
+        run: |
+          mkdir -p ~/.gradle
+          # Apply to ALL Gradle builds globally, including @react-native/gradle-plugin included build
+          # This is the only way to affect included builds' Kotlin compilation strategy
+          cat >> ~/.gradle/gradle.properties << 'EOF'
+          org.gradle.jvmargs=-Xmx6144m -XX:MaxMetaspaceSize=2048m -Dfile.encoding=UTF-8
+          kotlin.compiler.execution.strategy=in-process
+          org.gradle.java.installations.fromEnv=JAVA_HOME
+          org.gradle.java.installations.auto-download=false
+          EOF
+
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk-bundle \
