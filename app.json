@@ -12,10 +12,7 @@
       "backgroundColor": "#1a1a2e"
     },
     "updates": {
-      "enabled": true,
-      "checkAutomatically": "ON_LOAD",
-      "fallbackToCacheTimeout": 3000,
-      "url": "https://u.expo.dev/YOUR_EAS_PROJECT_ID"
+      "enabled": false
     },
     "runtimeVersion": {
       "policy": "appVersion"
