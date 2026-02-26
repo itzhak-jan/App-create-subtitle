@@ -81,6 +81,14 @@ jobs:
           echo "Remaining jvmToolchain references:"
           grep -rn "jvmToolchain" node_modules/@react-native/gradle-plugin || echo "None"
 
+      - name: Patch expo-updates-gradle-plugin — upgrade Kotlin 2.0.21 → 2.1.20
+        run: |
+          # Same Kotlin 2.0.21 + java-gradle-plugin bug — fix by upgrading to 2.1.20
+          FILE="node_modules/expo-updates/expo-updates-gradle-plugin/build.gradle.kts"
+          sed -i 's/kotlin("jvm") version("2.0.21")/kotlin("jvm") version("2.1.20")/' "$FILE"
+          echo "expo-updates-gradle-plugin Kotlin version after patch:"
+          grep 'kotlin("jvm")' "$FILE"
+
       - name: Patch expo-modules-autolinking — fix Kotlin serialization version
         run: |
           # expo-autolinking-plugin-shared uses kotlin("plugin.serialization") version "1.9.24"
