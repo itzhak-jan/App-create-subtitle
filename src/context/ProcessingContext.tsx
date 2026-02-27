@@ -6,7 +6,7 @@ import { ProcessingJob, ProcessingStatus } from '../types';
 import { extractAudio, burnSubtitles, createTempDir, cleanupTempDir, resetCancellation, cancelProcessing } from '../services/ffmpeg';
 import { splitAudioIfNeeded, cleanupChunks } from '../utils/audio-chunker';
 import { transcribeAudio } from '../services/whisper';
-import { translateSRT } from '../services/claude';
+import { translateSRTWithGeminiNano } from '../services/gemini-nano';
 import { saveSRTFile } from '../services/subtitles';
 import { saveJobToHistory } from '../services/storage';
 import {
@@ -20,7 +20,7 @@ import {
 
 type ProcessingContextType = {
   currentJob: ProcessingJob | null;
-  startProcessing: (job: ProcessingJob, apiKeys: { openai: string; claude: string }) => Promise<void>;
+  startProcessing: (job: ProcessingJob, apiKeys: { openai: string }) => Promise<void>;
   cancelCurrentJob: () => void;
   clearCurrentJob: () => void;
 };
@@ -50,7 +50,7 @@ export const ProcessingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const startProcessing = useCallback(
     async (
       job: ProcessingJob,
-      apiKeys: { openai: string; claude: string }
+      apiKeys: { openai: string }
     ): Promise<void> => {
       abortRef.current = false;
       resetCancellation();
@@ -116,18 +116,17 @@ export const ProcessingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
         updateJob({ srtContent, progress: 55, progressMessage: 'תמלול הושלם!' });
 
-        // Step 4: Translate
+        // Step 4: Translate (Gemini Nano — on-device, no API key needed)
         updateJob({
           status: 'translating',
           progress: 60,
-          progressMessage: 'שולח לתרגום (Claude AI)...',
+          progressMessage: 'מתרגם on-device (Gemini Nano)...',
         });
-        await updateOngoingProcessingNotification('תרגום Claude', 60);
+        await updateOngoingProcessingNotification('תרגום Gemini Nano', 60);
 
-        const translatedSRT = await translateSRT(
+        const translatedSRT = await translateSRTWithGeminiNano(
           srtContent,
           job.targetLanguage,
-          apiKeys.claude,
           (progress, message) => {
             updateJob({
               progress: 60 + progress * 0.2,

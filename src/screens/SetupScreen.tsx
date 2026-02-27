@@ -24,19 +24,12 @@ type Props = {
 
 export default function SetupScreen({ navigation }: Props) {
   const [openaiKey, setOpenaiKey] = useState('');
-  const [claudeKey, setClaudeKey] = useState('');
   const [showOpenai, setShowOpenai] = useState(false);
-  const [showClaude, setShowClaude] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleSave = async () => {
     if (!openaiKey.trim()) {
       Alert.alert('שגיאה', 'אנא הכנס מפתח OpenAI API');
-      return;
-    }
-
-    if (!claudeKey.trim()) {
-      Alert.alert('שגיאה', 'אנא הכנס מפתח Claude API');
       return;
     }
 
@@ -49,12 +42,11 @@ export default function SetupScreen({ navigation }: Props) {
     try {
       await saveApiKeys({
         openaiApiKey: openaiKey.trim(),
-        claudeApiKey: claudeKey.trim(),
       });
 
       navigation.replace('Home');
     } catch (error) {
-      Alert.alert('שגיאה', 'אירעה שגיאה בשמירת מפתחות ה-API. נסה שנית.');
+      Alert.alert('שגיאה', 'אירעה שגיאה בשמירת מפתח ה-API. נסה שנית.');
     } finally {
       setLoading(false);
     }
@@ -82,7 +74,16 @@ export default function SetupScreen({ navigation }: Props) {
             <Text style={styles.welcomeText}>
               SubFlow משתמשת ב-AI לתמלול ותרגום כתוביות אוטומטי.
               {'\n\n'}
-              נדרשים מפתחות API:
+              התמלול מתבצע דרך Whisper AI (OpenAI).{'\n'}
+              התרגום מתבצע on-device דרך Gemini Nano — בחינם, ללא אינטרנט.
+            </Text>
+          </View>
+
+          {/* Gemini Nano badge */}
+          <View style={styles.geminiNotice}>
+            <Ionicons name="phone-portrait" size={16} color="#4fc3f7" />
+            <Text style={styles.geminiText}>
+              תרגום Gemini Nano פועל ישירות על המכשיר — ללא עלויות API
             </Text>
           </View>
 
@@ -123,48 +124,11 @@ export default function SetupScreen({ navigation }: Props) {
             </View>
           </View>
 
-          {/* Claude Key */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>מפתח Claude API</Text>
-              <TouchableOpacity
-                onPress={() => Linking.openURL('https://console.anthropic.com/api-keys')}
-              >
-                <Text style={styles.helpLink}>קבל מפתח →</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.sectionDesc}>
-              משמש לתרגום הכתוביות לעברית ושפות נוספות
-            </Text>
-            <View style={styles.inputContainer}>
-              <TextInput
-                style={styles.input}
-                value={claudeKey}
-                onChangeText={setClaudeKey}
-                placeholder="sk-ant-..."
-                placeholderTextColor="#8892a4"
-                secureTextEntry={!showClaude}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              <TouchableOpacity
-                style={styles.eyeButton}
-                onPress={() => setShowClaude(!showClaude)}
-              >
-                <Ionicons
-                  name={showClaude ? 'eye-off' : 'eye'}
-                  size={20}
-                  color="#8892a4"
-                />
-              </TouchableOpacity>
-            </View>
-          </View>
-
           {/* Security Notice */}
           <View style={styles.securityNotice}>
             <Ionicons name="lock-closed" size={16} color="#4CAF50" />
             <Text style={styles.securityText}>
-              המפתחות מאוחסנים בצורה מאובטחת על המכשיר בלבד ולא נשלחים לשרתינו
+              המפתח מאוחסן בצורה מאובטחת על המכשיר בלבד ולא נשלח לשרתינו
             </Text>
           </View>
 
@@ -224,7 +188,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   welcomeSection: {
-    marginBottom: 24,
+    marginBottom: 16,
     backgroundColor: '#16213e',
     borderRadius: 12,
     padding: 16,
@@ -240,6 +204,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#b0bec5',
     lineHeight: 22,
+    textAlign: 'right',
+  },
+  geminiNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0d2b3e',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 20,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#1565c0',
+  },
+  geminiText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#4fc3f7',
     textAlign: 'right',
   },
   section: {

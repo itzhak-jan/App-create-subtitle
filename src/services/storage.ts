@@ -4,7 +4,6 @@ import { ApiKeys, AppSettings, ProcessingJob } from '../types';
 
 // Keys for secure storage
 const OPENAI_API_KEY = 'openai_api_key';
-const CLAUDE_API_KEY = 'claude_api_key';
 
 // Keys for regular storage
 const SETTINGS_KEY = 'app_settings';
@@ -12,29 +11,25 @@ const HISTORY_KEY = 'processing_history';
 
 export const saveApiKeys = async (keys: ApiKeys): Promise<void> => {
   await SecureStore.setItemAsync(OPENAI_API_KEY, keys.openaiApiKey);
-  await SecureStore.setItemAsync(CLAUDE_API_KEY, keys.claudeApiKey);
 };
 
 export const getApiKeys = async (): Promise<ApiKeys | null> => {
   const openaiApiKey = await SecureStore.getItemAsync(OPENAI_API_KEY);
-  const claudeApiKey = await SecureStore.getItemAsync(CLAUDE_API_KEY);
 
-  if (!openaiApiKey || !claudeApiKey) {
+  if (!openaiApiKey) {
     return null;
   }
 
-  return { openaiApiKey, claudeApiKey };
+  return { openaiApiKey };
 };
 
 export const clearApiKeys = async (): Promise<void> => {
   await SecureStore.deleteItemAsync(OPENAI_API_KEY);
-  await SecureStore.deleteItemAsync(CLAUDE_API_KEY);
 };
 
 export const hasApiKeys = async (): Promise<boolean> => {
   const openaiKey = await SecureStore.getItemAsync(OPENAI_API_KEY);
-  const claudeKey = await SecureStore.getItemAsync(CLAUDE_API_KEY);
-  return !!(openaiKey && claudeKey);
+  return !!openaiKey;
 };
 
 export const saveSettings = async (settings: AppSettings): Promise<void> => {

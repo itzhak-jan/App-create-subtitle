@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -22,11 +22,8 @@ type NavProp = NativeStackNavigationProp<RootStackParamList>;
 export default function SettingsScreen() {
   const navigation = useNavigation<NavProp>();
   const [openaiKey, setOpenaiKey] = useState('');
-  const [claudeKey, setClaudeKey] = useState('');
   const [showOpenai, setShowOpenai] = useState(false);
-  const [showClaude, setShowClaude] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [_keysLoaded, setKeysLoaded] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -37,17 +34,15 @@ export default function SettingsScreen() {
       const keys = await getApiKeys();
       if (keys) {
         setOpenaiKey(keys.openaiApiKey);
-        setClaudeKey(keys.claudeApiKey);
       }
-      setKeysLoaded(true);
     } catch {
-      setKeysLoaded(true);
+      // ignore
     }
   };
 
   const handleSaveKeys = async () => {
-    if (!openaiKey.trim() || !claudeKey.trim()) {
-      Alert.alert('שגיאה', 'אנא מלא את שני מפתחות ה-API');
+    if (!openaiKey.trim()) {
+      Alert.alert('שגיאה', 'אנא הכנס מפתח OpenAI API');
       return;
     }
 
@@ -55,11 +50,10 @@ export default function SettingsScreen() {
     try {
       await saveApiKeys({
         openaiApiKey: openaiKey.trim(),
-        claudeApiKey: claudeKey.trim(),
       });
-      Alert.alert('הצלחה', 'מפתחות ה-API נשמרו בהצלחה');
+      Alert.alert('הצלחה', 'מפתח ה-API נשמר בהצלחה');
     } catch {
-      Alert.alert('שגיאה', 'לא ניתן לשמור את המפתחות');
+      Alert.alert('שגיאה', 'לא ניתן לשמור את המפתח');
     } finally {
       setSaving(false);
     }
@@ -67,8 +61,8 @@ export default function SettingsScreen() {
 
   const handleClearKeys = () => {
     Alert.alert(
-      'מחיקת מפתחות',
-      'האם אתה בטוח שברצונך למחוק את מפתחות ה-API?',
+      'מחיקת מפתח',
+      'האם אתה בטוח שברצונך למחוק את מפתח ה-API?',
       [
         { text: 'ביטול', style: 'cancel' },
         {
@@ -77,8 +71,7 @@ export default function SettingsScreen() {
           onPress: async () => {
             await clearApiKeys();
             setOpenaiKey('');
-            setClaudeKey('');
-            Alert.alert('הושלם', 'מפתחות ה-API נמחקו');
+            Alert.alert('הושלם', 'מפתח ה-API נמחק');
             navigation.replace('Setup');
           },
         },
@@ -148,35 +141,12 @@ export default function SettingsScreen() {
             </View>
           </View>
 
-          {/* Claude */}
-          <View style={styles.fieldContainer}>
-            <View style={styles.fieldHeader}>
-              <Text style={styles.fieldLabel}>Claude API Key</Text>
-              <TouchableOpacity onPress={() => Linking.openURL('https://console.anthropic.com/api-keys')}>
-                <Text style={styles.helpLink}>קבל מפתח</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.fieldDesc}>לתרגום כתוביות באמצעות Claude AI</Text>
-            <View style={styles.inputContainer}>
-              <TextInput
-                style={styles.input}
-                value={showClaude ? claudeKey : (claudeKey ? maskApiKey(claudeKey) : '')}
-                onChangeText={setClaudeKey}
-                placeholder="sk-ant-..."
-                placeholderTextColor="#8892a4"
-                secureTextEntry={!showClaude}
-                autoCapitalize="none"
-                autoCorrect={false}
-                onFocus={() => setShowClaude(true)}
-                onBlur={() => setShowClaude(false)}
-              />
-              <TouchableOpacity
-                style={styles.eyeButton}
-                onPress={() => setShowClaude(!showClaude)}
-              >
-                <Ionicons name={showClaude ? 'eye-off' : 'eye'} size={20} color="#8892a4" />
-              </TouchableOpacity>
-            </View>
+          {/* Gemini Nano info */}
+          <View style={styles.geminiInfo}>
+            <Ionicons name="phone-portrait" size={16} color="#4fc3f7" />
+            <Text style={styles.geminiText}>
+              תרגום: Gemini Nano — פועל on-device, ללא מפתח API
+            </Text>
           </View>
 
           <TouchableOpacity
@@ -185,14 +155,14 @@ export default function SettingsScreen() {
             disabled={saving}
           >
             <Ionicons name="save" size={18} color="#ffffff" />
-            <Text style={styles.saveButtonText}>{saving ? 'שומר...' : 'שמור מפתחות'}</Text>
+            <Text style={styles.saveButtonText}>{saving ? 'שומר...' : 'שמור מפתח'}</Text>
           </TouchableOpacity>
 
           {/* Security Notice */}
           <View style={styles.securityNotice}>
             <Ionicons name="shield-checkmark" size={16} color="#4CAF50" />
             <Text style={styles.securityText}>
-              מפתחות מאוחסנים בצורה מוצפנת על המכשיר בלבד
+              המפתח מאוחסן בצורה מוצפנת על המכשיר בלבד
             </Text>
           </View>
         </View>
@@ -208,7 +178,7 @@ export default function SettingsScreen() {
 
           <TouchableOpacity style={[styles.dangerButton, styles.dangerButtonFilled]} onPress={handleClearKeys}>
             <Ionicons name="key" size={18} color="#ffffff" />
-            <Text style={styles.dangerButtonTextFilled}>מחק מפתחות API</Text>
+            <Text style={styles.dangerButtonTextFilled}>מחק מפתח API</Text>
           </TouchableOpacity>
         </View>
 
@@ -220,7 +190,7 @@ export default function SettingsScreen() {
             אפליקציית כתוביות אוטומטיות מבוססת AI
           </Text>
           <Text style={styles.aboutTech}>
-            מופעל על ידי OpenAI Whisper ו-Claude AI
+            תמלול: OpenAI Whisper · תרגום: Gemini Nano (on-device)
           </Text>
         </View>
       </ScrollView>
@@ -289,6 +259,23 @@ const styles = StyleSheet.create({
   },
   eyeButton: {
     padding: 12,
+  },
+  geminiInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0d2b3e',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 14,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#1565c0',
+  },
+  geminiText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#4fc3f7',
+    textAlign: 'right',
   },
   saveButton: {
     backgroundColor: '#e94560',
