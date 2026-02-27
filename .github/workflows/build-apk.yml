@@ -43,11 +43,6 @@ jobs:
           org.gradle.java.installations.fromEnv=JAVA_HOME
           org.gradle.java.installations.auto-download=false
           EOF
-          # Store GitHub Packages credentials for ffmpeg-kit artifact resolution.
-          # arthenica/ffmpeg-kit publishes com.arthenica:ffmpeg-kit-* to GitHub Packages
-          # (not Maven Central). GITHUB_TOKEN has read:packages permission by default.
-          echo "gpr.user=${{ github.actor }}" >> ~/.gradle/gradle.properties
-          echo "gpr.key=${{ secrets.GITHUB_TOKEN }}" >> ~/.gradle/gradle.properties
 
       - name: Free disk space
         run: |
@@ -69,6 +64,44 @@ jobs:
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
+
+      - name: Build local Maven repo for ffmpeg-kit (arthenica retired — use community mirror)
+        run: |
+          # arthenica/ffmpeg-kit was retired in June 2025.
+          # com.arthenica:ffmpeg-kit-https:6.0-2 was never published to Maven Central.
+          # The community-maintained fork at io.github.maitrungduc1410:ffmpeg-kit-https:6.0.1
+          # is available on Maven Central and is API-compatible (same codebase).
+          # We download it and create a local Maven repo entry under the original coordinates
+          # (com.arthenica:ffmpeg-kit-https:6.0-2) so no patching of node_modules is required.
+          REPO_DIR="/tmp/ffmpeg-local-maven/com/arthenica/ffmpeg-kit-https/6.0-2"
+          mkdir -p "$REPO_DIR"
+
+          echo "Downloading ffmpeg-kit-https AAR from community mirror (~16 MB)..."
+          curl -fL \
+            "https://repo1.maven.org/maven2/io/github/maitrungduc1410/ffmpeg-kit-https/6.0.1/ffmpeg-kit-https-6.0.1.aar" \
+            -o "$REPO_DIR/ffmpeg-kit-https-6.0-2.aar"
+
+          # Minimal POM so Gradle accepts the artifact as com.arthenica:ffmpeg-kit-https:6.0-2
+          cat > "$REPO_DIR/ffmpeg-kit-https-6.0-2.pom" << 'POMEOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <project>
+            <modelVersion>4.0.0</modelVersion>
+            <groupId>com.arthenica</groupId>
+            <artifactId>ffmpeg-kit-https</artifactId>
+            <version>6.0-2</version>
+            <packaging>aar</packaging>
+            <dependencies>
+              <dependency>
+                <groupId>com.arthenica</groupId>
+                <artifactId>smart-exception-java</artifactId>
+                <version>0.2.1</version>
+              </dependency>
+            </dependencies>
+          </project>
+          POMEOF
+
+          echo "Local Maven repo contents:"
+          ls -lh "$REPO_DIR"
 
       - name: Patch @react-native/gradle-plugin — upgrade Kotlin 2.0.21 → 2.1.20
         run: |
@@ -120,7 +153,7 @@ jobs:
         env:
           EXPO_NO_DOTENV: 1
 
-      - name: Patch android/build.gradle — add async-storage local_repo and ffmpeg-kit GitHub Packages
+      - name: Patch android/build.gradle — add async-storage local_repo and ffmpeg-kit local Maven repo
         run: |
           # Use Python for reliable multiline insertion into the Gradle file.
           #
@@ -128,12 +161,10 @@ jobs:
           #    containing org.asyncstorage.shared_storage:storage-android:1.0.0.
           #    Gradle fails with "Could not find..." without this repo declared.
           #
-          # 2. arthenica/ffmpeg-kit publishes com.arthenica:ffmpeg-kit-* to GitHub Packages,
-          #    not Maven Central. The GITHUB_TOKEN (with read:packages) is stored in
-          #    ~/.gradle/gradle.properties (gpr.user / gpr.key) from a prior step.
+          # 2. com.arthenica:ffmpeg-kit-https:6.0-2 was never published to Maven Central.
+          #    We built a local Maven repo in /tmp/ffmpeg-local-maven in the prior step
+          #    with the community-mirror AAR repackaged under the original coordinates.
           python3 << 'PYEOF'
-          import re
-
           with open('android/build.gradle', 'r') as f:
               content = f.read()
 
@@ -142,14 +173,9 @@ jobs:
                   url("$rootDir/../node_modules/@react-native-async-storage/async-storage/android/local_repo")
               }
               maven {
-                  url 'https://maven.pkg.github.com/arthenica/ffmpeg-kit'
-                  credentials {
-                      username = findProperty('gpr.user') ?: System.getenv('GITHUB_ACTOR')
-                      password = findProperty('gpr.key') ?: System.getenv('GITHUB_TOKEN')
-                  }
+                  url '/tmp/ffmpeg-local-maven'
               }"""
 
-          # Insert after the jitpack line inside allprojects { repositories { ... } }
           content = content.replace(
               "maven { url 'https://www.jitpack.io' }",
               "maven { url 'https://www.jitpack.io' }" + extra_repos,
@@ -163,7 +189,7 @@ jobs:
           PYEOF
 
           echo "android/build.gradle allprojects.repositories after patch:"
-          grep -A 30 "allprojects" android/build.gradle | head -35
+          grep -A 20 "allprojects" android/build.gradle | head -25
 
       - name: Patch app/build.gradle — fix hermesCommand (hermes-compiler not in RN 0.79.x)
         run: |
@@ -215,8 +241,6 @@ jobs:
           exit $BUILD_EXIT
         env:
           JAVA_OPTS: "-Xmx6144m -XX:MaxMetaspaceSize=2048m"
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Sign APK (debug keystore for CI)
         working-directory: android
