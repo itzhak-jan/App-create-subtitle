@@ -115,6 +115,18 @@ jobs:
         env:
           EXPO_NO_DOTENV: 1
 
+      - name: Patch android/build.gradle — add async-storage local_repo Maven repository
+        run: |
+          # @react-native-async-storage/async-storage ships a local Maven repository
+          # containing org.asyncstorage.shared_storage:storage-android:1.0.0.
+          # Without declaring this repo in allprojects.repositories, Gradle cannot
+          # resolve the dependency and the release build fails with
+          # "Could not find org.asyncstorage.shared_storage:storage-android:1.0.0".
+          sed -i "s|maven { url 'https://www.jitpack.io' }|maven { url 'https://www.jitpack.io' }\n        maven {\n            url(\"\$rootDir/../node_modules/@react-native-async-storage/async-storage/android/local_repo\")\n        }|" \
+            android/build.gradle
+          echo "android/build.gradle repositories after patch:"
+          grep -A 8 "allprojects" android/build.gradle | head -15
+
       - name: Patch app/build.gradle — fix hermesCommand (hermes-compiler not in RN 0.79.x)
         run: |
           # expo prebuild generates a hermesCommand that tries to resolve 'hermes-compiler/package.json'
