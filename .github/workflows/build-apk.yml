@@ -43,6 +43,11 @@ jobs:
           org.gradle.java.installations.fromEnv=JAVA_HOME
           org.gradle.java.installations.auto-download=false
           EOF
+          # Store GitHub Packages credentials for ffmpeg-kit artifact resolution.
+          # arthenica/ffmpeg-kit publishes com.arthenica:ffmpeg-kit-* to GitHub Packages
+          # (not Maven Central). GITHUB_TOKEN has read:packages permission by default.
+          echo "gpr.user=${{ github.actor }}" >> ~/.gradle/gradle.properties
+          echo "gpr.key=${{ secrets.GITHUB_TOKEN }}" >> ~/.gradle/gradle.properties
 
       - name: Free disk space
         run: |
@@ -115,17 +120,50 @@ jobs:
         env:
           EXPO_NO_DOTENV: 1
 
-      - name: Patch android/build.gradle — add async-storage local_repo Maven repository
+      - name: Patch android/build.gradle — add async-storage local_repo and ffmpeg-kit GitHub Packages
         run: |
-          # @react-native-async-storage/async-storage ships a local Maven repository
-          # containing org.asyncstorage.shared_storage:storage-android:1.0.0.
-          # Without declaring this repo in allprojects.repositories, Gradle cannot
-          # resolve the dependency and the release build fails with
-          # "Could not find org.asyncstorage.shared_storage:storage-android:1.0.0".
-          sed -i "s|maven { url 'https://www.jitpack.io' }|maven { url 'https://www.jitpack.io' }\n        maven {\n            url(\"\$rootDir/../node_modules/@react-native-async-storage/async-storage/android/local_repo\")\n        }|" \
-            android/build.gradle
-          echo "android/build.gradle repositories after patch:"
-          grep -A 8 "allprojects" android/build.gradle | head -15
+          # Use Python for reliable multiline insertion into the Gradle file.
+          #
+          # 1. @react-native-async-storage/async-storage ships a bundled local Maven repo
+          #    containing org.asyncstorage.shared_storage:storage-android:1.0.0.
+          #    Gradle fails with "Could not find..." without this repo declared.
+          #
+          # 2. arthenica/ffmpeg-kit publishes com.arthenica:ffmpeg-kit-* to GitHub Packages,
+          #    not Maven Central. The GITHUB_TOKEN (with read:packages) is stored in
+          #    ~/.gradle/gradle.properties (gpr.user / gpr.key) from a prior step.
+          python3 << 'PYEOF'
+          import re
+
+          with open('android/build.gradle', 'r') as f:
+              content = f.read()
+
+          extra_repos = """
+              maven {
+                  url("$rootDir/../node_modules/@react-native-async-storage/async-storage/android/local_repo")
+              }
+              maven {
+                  url 'https://maven.pkg.github.com/arthenica/ffmpeg-kit'
+                  credentials {
+                      username = findProperty('gpr.user') ?: System.getenv('GITHUB_ACTOR')
+                      password = findProperty('gpr.key') ?: System.getenv('GITHUB_TOKEN')
+                  }
+              }"""
+
+          # Insert after the jitpack line inside allprojects { repositories { ... } }
+          content = content.replace(
+              "maven { url 'https://www.jitpack.io' }",
+              "maven { url 'https://www.jitpack.io' }" + extra_repos,
+              1
+          )
+
+          with open('android/build.gradle', 'w') as f:
+              f.write(content)
+
+          print("Patch applied successfully")
+          PYEOF
+
+          echo "android/build.gradle allprojects.repositories after patch:"
+          grep -A 30 "allprojects" android/build.gradle | head -35
 
       - name: Patch app/build.gradle — fix hermesCommand (hermes-compiler not in RN 0.79.x)
         run: |
@@ -177,6 +215,8 @@ jobs:
           exit $BUILD_EXIT
         env:
           JAVA_OPTS: "-Xmx6144m -XX:MaxMetaspaceSize=2048m"
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Sign APK (debug keystore for CI)
         working-directory: android
