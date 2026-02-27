@@ -115,6 +115,17 @@ jobs:
         env:
           EXPO_NO_DOTENV: 1
 
+      - name: Patch app/build.gradle — fix hermesCommand (hermes-compiler not in RN 0.79.x)
+        run: |
+          # expo prebuild generates a hermesCommand that tries to resolve 'hermes-compiler/package.json'
+          # via node, but that package does not exist in React Native 0.79.x.
+          # RN 0.79.x bundles hermesc directly in node_modules/react-native/sdks/hermesc/<OS-BIN>/.
+          # Replace the broken node-based lookup with the bundled hermesc path.
+          sed -i '/hermesCommand = new File.*hermes-compiler/c\    hermesCommand = "$projectRoot/node_modules/react-native/sdks/hermesc/%OS-BIN%/hermesc"' \
+            android/app/build.gradle
+          echo "hermesCommand after patch:"
+          grep "hermesCommand" android/app/build.gradle | head -3
+
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 

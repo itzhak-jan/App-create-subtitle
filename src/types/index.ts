@@ -42,7 +42,6 @@ export type SRTEntry = {
 
 export type ApiKeys = {
   openaiApiKey: string;
-  claudeApiKey: string;
 };
 
 export type AppSettings = {

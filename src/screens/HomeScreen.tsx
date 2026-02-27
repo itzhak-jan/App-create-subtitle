@@ -179,7 +179,7 @@ export default function HomeScreen() {
     await saveSettings({ targetLanguage, sourceLanguage, autoDetectLanguage: sourceLanguage === 'auto' });
 
     // Start processing
-    startProcessing(job, { openai: apiKeys.openaiApiKey, claude: apiKeys.claudeApiKey });
+    startProcessing(job, { openai: apiKeys.openaiApiKey });
 
     // Navigate to processing screen
     navigation.navigate('Processing', { jobId: job.id });
