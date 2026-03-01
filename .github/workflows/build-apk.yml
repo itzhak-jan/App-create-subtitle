@@ -173,7 +173,7 @@ jobs:
                   url("$rootDir/../node_modules/@react-native-async-storage/async-storage/android/local_repo")
               }
               maven {
-                  url '/tmp/ffmpeg-local-maven'
+                  url 'file:///tmp/ffmpeg-local-maven'
               }"""
 
           content = content.replace(
@@ -201,6 +201,10 @@ jobs:
             android/app/build.gradle
           echo "hermesCommand after patch:"
           grep "hermesCommand" android/app/build.gradle | head -3
+          echo "--- All node calls remaining in app/build.gradle ---"
+          grep -n 'node.*--print\|\.execute.*node\|commandLine.*node' android/app/build.gradle || echo "(none found)"
+          echo "--- react {} block in app/build.gradle ---"
+          sed -n '/^react {/,/^}/p' android/app/build.gradle | head -40
 
       - name: Make gradlew executable
         run: chmod +x android/gradlew
@@ -233,10 +237,10 @@ jobs:
           ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee gradle-build.log; BUILD_EXIT=${PIPESTATUS[0]}
           if [ $BUILD_EXIT -ne 0 ]; then
             echo "::error::Gradle build failed. Full error section:"
-            # Extract from FAILURE block to end of file (up to 150 lines)
-            grep -n "FAILURE\|What went wrong\|Caused by\|compileKotlin\|BUILD FAILED" gradle-build.log | tail -30 || true
-            echo "--- Last 80 lines of build log ---"
-            tail -80 gradle-build.log || true
+            # Extract key error lines — includes "Execution failed for task" to identify which task failed
+            grep -n "FAILURE\|What went wrong\|Caused by\|compileKotlin\|BUILD FAILED\|Execution failed\|Process 'command\|error:" gradle-build.log | tail -50 || true
+            echo "--- Last 200 lines of build log ---"
+            tail -200 gradle-build.log || true
           fi
           exit $BUILD_EXIT
         env:
