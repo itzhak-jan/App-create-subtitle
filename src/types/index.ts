@@ -41,7 +41,7 @@ export type SRTEntry = {
 };
 
 export type ApiKeys = {
-  openaiApiKey: string;
+  geminiApiKey: string;
 };
 
 export type AppSettings = {
@@ -69,12 +69,14 @@ export const SUPPORTED_LANGUAGES: Language[] = [
   { code: 'he', name: 'Hebrew', nativeName: 'עברית', isRTL: true },
   { code: 'en', name: 'English', nativeName: 'English', isRTL: false },
   { code: 'ar', name: 'Arabic', nativeName: 'العربية', isRTL: true },
+  { code: 'fa', name: 'Persian', nativeName: 'فارسی', isRTL: true },
   { code: 'fr', name: 'French', nativeName: 'Français', isRTL: false },
   { code: 'de', name: 'German', nativeName: 'Deutsch', isRTL: false },
   { code: 'es', name: 'Spanish', nativeName: 'Español', isRTL: false },
   { code: 'ru', name: 'Russian', nativeName: 'Русский', isRTL: false },
   { code: 'zh', name: 'Chinese', nativeName: '中文', isRTL: false },
   { code: 'ja', name: 'Japanese', nativeName: '日本語', isRTL: false },
+  { code: 'ko', name: 'Korean', nativeName: '한국어', isRTL: false },
   { code: 'pt', name: 'Portuguese', nativeName: 'Português', isRTL: false },
   { code: 'it', name: 'Italian', nativeName: 'Italiano', isRTL: false },
   { code: 'tr', name: 'Turkish', nativeName: 'Türkçe', isRTL: false },
