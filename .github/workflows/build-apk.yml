@@ -73,27 +73,59 @@ jobs:
 
       # ── Patch react-native-screens codegen type bug ───────────────────
       #
-      # RN 0.79.x codegen TypeScript parser cannot resolve namespace-qualified
-      # types such as CT.WithDefault<boolean, true> and returns `undefined`,
-      # causing: "Unknown prop type for accessibilityContainerViewIsModal: undefined"
+      # react-native-screens 4.24.0 uses namespace-qualified types (CT.WithDefault,
+      # CT.Float, CT.DirectEventHandler, etc.) across 14 fabric spec files.
+      # The RN 0.79.x codegen TypeScript parser cannot resolve namespace-qualified
+      # type references — they resolve to `undefined`, causing:
+      #   "Unknown prop type for <name>: undefined"
       #
-      # File: node_modules/react-native-screens/src/fabric/FullWindowOverlayNativeComponent.ts
-      # Fix: replace CT.WithDefault<boolean, true> with plain `boolean` so the
-      #      codegen parser can resolve the type successfully.
+      # Fix: use a Node.js script to strip the `CT.` prefix from all occurrences
+      # across every fabric spec file. The codegen recognizes WithDefault, Float,
+      # Int32, Double, DirectEventHandler, etc. by name regardless of import path.
       #
-      - name: Patch react-native-screens codegen type
+      - name: Patch react-native-screens codegen types
         run: |
-          FILE="node_modules/react-native-screens/src/fabric/FullWindowOverlayNativeComponent.ts"
-          if [ -f "$FILE" ]; then
-            # Remove the unresolvable CodegenTypes namespace import
-            sed -i "s/import type { CodegenTypes as CT, ViewProps } from 'react-native';/import type { ViewProps } from 'react-native';/" "$FILE"
-            # Replace CT.WithDefault<boolean, true> with plain boolean
-            sed -i 's/CT\.WithDefault<boolean, *true>/boolean/g' "$FILE"
-            echo "Patched $FILE:"
-            head -12 "$FILE"
-          else
-            echo "WARNING: $FILE not found — skipping patch"
-          fi
+          node - <<'PATCH_SCRIPT'
+          const fs = require('fs');
+          const path = require('path');
+          const glob = require('node:fs');
+
+          const fabricDir = 'node_modules/react-native-screens/src/fabric';
+
+          function findFiles(dir) {
+            const entries = fs.readdirSync(dir, { withFileTypes: true });
+            let files = [];
+            for (const e of entries) {
+              const full = path.join(dir, e.name);
+              if (e.isDirectory()) files = files.concat(findFiles(full));
+              else if (e.name.endsWith('.ts') || e.name.endsWith('.tsx')) files.push(full);
+            }
+            return files;
+          }
+
+          const files = findFiles(fabricDir);
+          let patched = 0;
+
+          for (const f of files) {
+            let src = fs.readFileSync(f, 'utf8');
+            if (!src.includes('CT.')) continue;
+
+            // Remove "CodegenTypes as CT, " or ", CodegenTypes as CT" from imports
+            let next = src
+              .replace(/CodegenTypes as CT,\s*/g, '')
+              .replace(/,\s*CodegenTypes as CT/g, '')
+              // Strip the CT. namespace prefix from all usages
+              .replace(/\bCT\./g, '');
+
+            if (next !== src) {
+              fs.writeFileSync(f, next, 'utf8');
+              console.log('Patched:', f);
+              patched++;
+            }
+          }
+
+          console.log(`Done — patched ${patched} file(s).`);
+          PATCH_SCRIPT
 
       # ── Build local Maven repo for ffmpeg-kit ─────────────────────────
       #
