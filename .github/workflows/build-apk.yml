@@ -2,87 +2,87 @@ name: Build Android APK
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
     types: [closed]
 
 jobs:
   build:
-    name: Build Android APK
+    name: Build APK
     runs-on: ubuntu-latest
-    # For PRs, only run if merged
     if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Configure global Gradle properties
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept licenses and install NDK
         run: |
-          mkdir -p ~/.gradle
-          # Apply to ALL Gradle builds globally, including @react-native/gradle-plugin included build
-          # This is the only way to affect included builds' Kotlin compilation strategy
-          cat >> ~/.gradle/gradle.properties << 'EOF'
-          org.gradle.jvmargs=-Xmx6144m -XX:MaxMetaspaceSize=2048m -Dfile.encoding=UTF-8
-          kotlin.compiler.execution.strategy=in-process
-          org.gradle.java.installations.fromEnv=JAVA_HOME
-          org.gradle.java.installations.auto-download=false
-          EOF
+          yes | sdkmanager --licenses || true
+          sdkmanager "ndk;27.1.12297006" "cmake;3.22.1"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.1.12297006" >> $GITHUB_ENV
 
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk-bundle \
             /opt/ghc /usr/local/.ghcup || true
-          df -h
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Accept Android SDK Licenses
-        run: yes | sdkmanager --licenses || true
-
-      - name: Install NDK and CMake
-        run: |
-          sdkmanager "ndk;27.1.12297006" "cmake;3.22.1"
-          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.1.12297006" >> $GITHUB_ENV
-          echo "NDK_HOME=$ANDROID_HOME/ndk/27.1.12297006" >> $GITHUB_ENV
-
-      - name: Install dependencies
+      - name: Install JS dependencies
         run: npm ci --legacy-peer-deps
 
-      - name: Build local Maven repo for ffmpeg-kit (arthenica retired — use community mirror)
+      # ── Patch node_modules for known Kotlin version bugs ──────────────
+      #
+      # Kotlin 2.0.21 has a "source must not be null" bug when java-gradle-plugin
+      # is used in an included build with Gradle 8.8+. Fixed in Kotlin 2.1.0+.
+      # We upgrade all occurrences to 2.1.20 to match the project's kotlinVersion.
+      #
+      - name: Patch Kotlin versions in Gradle plugins (2.0.21 -> 2.1.20)
         run: |
-          # arthenica/ffmpeg-kit was retired in June 2025.
-          # com.arthenica:ffmpeg-kit-https:6.0-2 was never published to Maven Central.
-          # The community-maintained fork at io.github.maitrungduc1410:ffmpeg-kit-https:6.0.1
-          # is available on Maven Central and is API-compatible (same codebase).
-          # We download it and create a local Maven repo entry under the original coordinates
-          # (com.arthenica:ffmpeg-kit-https:6.0-2) so no patching of node_modules is required.
-          REPO_DIR="/tmp/ffmpeg-local-maven/com/arthenica/ffmpeg-kit-https/6.0-2"
-          mkdir -p "$REPO_DIR"
+          # @react-native/gradle-plugin
+          TOML="node_modules/@react-native/gradle-plugin/gradle/libs.versions.toml"
+          if [ -f "$TOML" ]; then
+            sed -i 's/^kotlin = "2.0.21"/kotlin = "2.1.20"/' "$TOML"
+            find node_modules/@react-native/gradle-plugin -name "build.gradle.kts" \
+              -exec sed -i '/^kotlin { jvmToolchain(17) }$/d' {} \;
+            echo "Patched @react-native/gradle-plugin"
+          fi
 
-          echo "Downloading ffmpeg-kit-https AAR from community mirror (~16 MB)..."
-          curl -fL \
+          # expo-updates-gradle-plugin
+          FILE="node_modules/expo-updates/expo-updates-gradle-plugin/build.gradle.kts"
+          [ -f "$FILE" ] && sed -i 's/kotlin("jvm") version("2.0.21")/kotlin("jvm") version("2.1.20")/' "$FILE" && echo "Patched expo-updates-gradle-plugin"
+
+          # expo-modules-autolinking serialization plugin
+          FILE="node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-plugin-shared/build.gradle.kts"
+          [ -f "$FILE" ] && sed -i 's/kotlin("plugin.serialization") version "1.9.24"/kotlin("plugin.serialization") version "2.1.20"/' "$FILE" && echo "Patched expo-autolinking serialization"
+
+      # ── Build local Maven repo for ffmpeg-kit ─────────────────────────
+      #
+      # arthenica/ffmpeg-kit was retired (June 2025). The original Maven artifact
+      # com.arthenica:ffmpeg-kit-https:6.0-2 was never published. We download the
+      # API-compatible community fork from Maven Central and serve it under the
+      # original coordinates so no JS-side patching is needed.
+      #
+      - name: Build local ffmpeg-kit Maven repo
+        run: |
+          DIR="/tmp/ffmpeg-local-maven/com/arthenica/ffmpeg-kit-https/6.0-2"
+          mkdir -p "$DIR"
+          curl -fSL \
             "https://repo1.maven.org/maven2/io/github/maitrungduc1410/ffmpeg-kit-https/6.0.1/ffmpeg-kit-https-6.0.1.aar" \
-            -o "$REPO_DIR/ffmpeg-kit-https-6.0-2.aar"
-
-          # Minimal POM so Gradle accepts the artifact as com.arthenica:ffmpeg-kit-https:6.0-2
-          cat > "$REPO_DIR/ffmpeg-kit-https-6.0-2.pom" << 'POMEOF'
+            -o "$DIR/ffmpeg-kit-https-6.0-2.aar"
+          cat > "$DIR/ffmpeg-kit-https-6.0-2.pom" << 'POMEOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <project>
             <modelVersion>4.0.0</modelVersion>
@@ -99,177 +99,162 @@ jobs:
             </dependencies>
           </project>
           POMEOF
+          echo "Local Maven repo ready: $(ls -lh $DIR/*.aar | awk '{print $5, $NF}')"
 
-          echo "Local Maven repo contents:"
-          ls -lh "$REPO_DIR"
-
-      - name: Patch @react-native/gradle-plugin — upgrade Kotlin 2.0.21 → 2.1.20
-        run: |
-          # Kotlin 2.0.21 has a known bug: when java-gradle-plugin is used in an included
-          # build with Gradle 8.8+, it throws "source must not be null" during compileKotlin.
-          # This was fixed in Kotlin 2.1.0. Upgrading the version in the libs.versions.toml
-          # is the correct fix — all other subprojects use this same version reference.
-          TOML="node_modules/@react-native/gradle-plugin/gradle/libs.versions.toml"
-          sed -i 's/^kotlin = "2.0.21"/kotlin = "2.1.20"/' "$TOML"
-          echo "Kotlin version after patch:"
-          grep '^kotlin ' "$TOML"
-          # Also remove jvmToolchain(17) — redundant now that jvmTarget is set in compilerOptions
-          find node_modules/@react-native/gradle-plugin -name "build.gradle.kts" \
-            -exec sed -i '/^kotlin { jvmToolchain(17) }$/d' {} \;
-          echo "Remaining jvmToolchain references:"
-          grep -rn "jvmToolchain" node_modules/@react-native/gradle-plugin || echo "None"
-
-      - name: Patch expo-updates-gradle-plugin — upgrade Kotlin 2.0.21 → 2.1.20
-        run: |
-          # Same Kotlin 2.0.21 + java-gradle-plugin bug — fix by upgrading to 2.1.20
-          FILE="node_modules/expo-updates/expo-updates-gradle-plugin/build.gradle.kts"
-          sed -i 's/kotlin("jvm") version("2.0.21")/kotlin("jvm") version("2.1.20")/' "$FILE"
-          echo "expo-updates-gradle-plugin Kotlin version after patch:"
-          grep 'kotlin("jvm")' "$FILE"
-
-      - name: Patch expo-modules-autolinking — fix Kotlin serialization version
-        run: |
-          # expo-autolinking-plugin-shared uses kotlin("plugin.serialization") version "1.9.24"
-          # but the parent project uses Kotlin 2.1.20 — version mismatch causes null source errors.
-          # The serialization plugin version must match the Kotlin compiler version.
-          sed -i 's/kotlin("plugin.serialization") version "1.9.24"/kotlin("plugin.serialization") version "2.1.20"/' \
-            node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-plugin-shared/build.gradle.kts
-          echo "Patched serialization version:"
-          grep "plugin.serialization" node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-plugin-shared/build.gradle.kts
-
-      - name: Install Expo CLI
-        run: npm install -g expo-cli @expo/cli eas-cli
-
-      - name: Run type check
-        run: npx tsc --noEmit
-        continue-on-error: true
-
-      - name: Run linter
-        run: npx eslint src --ext .ts,.tsx --max-warnings 50
-        continue-on-error: true
-
-      - name: Generate native Android project (prebuild)
+      # ── Expo prebuild ─────────────────────────────────────────────────
+      - name: Generate native Android project
         run: npx expo prebuild --platform android --clean
         env:
           EXPO_NO_DOTENV: 1
 
-      - name: Patch android/build.gradle — add async-storage local_repo and ffmpeg-kit local Maven repo
+      # ── Patch ALL generated Gradle files in one shot ──────────────────
+      #
+      # expo prebuild generates android/build.gradle and android/app/build.gradle
+      # with several issues that must be fixed before Gradle can run:
+      #
+      #   1. Missing Maven repos for async-storage local_repo and ffmpeg-kit
+      #   2. Broken hermesCommand that calls node to resolve 'hermes-compiler'
+      #      (doesn't exist in RN 0.79.x — hermesc is bundled in react-native/sdks/)
+      #
+      # We use a single Python script to patch everything reliably.
+      #
+      - name: Patch generated Gradle files
         run: |
-          # Use Python for reliable multiline insertion into the Gradle file.
-          #
-          # 1. @react-native-async-storage/async-storage ships a bundled local Maven repo
-          #    containing org.asyncstorage.shared_storage:storage-android:1.0.0.
-          #    Gradle fails with "Could not find..." without this repo declared.
-          #
-          # 2. com.arthenica:ffmpeg-kit-https:6.0-2 was never published to Maven Central.
-          #    We built a local Maven repo in /tmp/ffmpeg-local-maven in the prior step
-          #    with the community-mirror AAR repackaged under the original coordinates.
           python3 << 'PYEOF'
-          with open('android/build.gradle', 'r') as f:
-              content = f.read()
+          import re, os, sys
 
-          extra_repos = """
+          def patch_file(path, description):
+              """Read a file, return its content, and print a header."""
+              if not os.path.exists(path):
+                  print(f"WARNING: {path} not found — skipping {description}")
+                  return None
+              with open(path, 'r') as f:
+                  return f.read()
+
+          def write_file(path, content):
+              with open(path, 'w') as f:
+                  f.write(content)
+
+          errors = []
+
+          # ─── 1. android/build.gradle: add custom Maven repositories ───
+          path = 'android/build.gradle'
+          content = patch_file(path, 'Maven repo injection')
+          if content:
+              marker = "maven { url 'https://www.jitpack.io' }"
+              extra = """
               maven {
                   url("$rootDir/../node_modules/@react-native-async-storage/async-storage/android/local_repo")
               }
               maven {
-                  url '/tmp/ffmpeg-local-maven'
+                  url 'file:///tmp/ffmpeg-local-maven'
               }"""
+              if marker in content:
+                  content = content.replace(marker, marker + extra, 1)
+                  write_file(path, content)
+                  print(f"OK  {path}: added async-storage + ffmpeg-kit Maven repos")
+              else:
+                  errors.append(f"{path}: could not find jitpack marker to inject repos")
+                  print(f"ERR {path}: jitpack marker not found")
 
-          content = content.replace(
-              "maven { url 'https://www.jitpack.io' }",
-              "maven { url 'https://www.jitpack.io' }" + extra_repos,
-              1
-          )
+          # ─── 2. android/app/build.gradle: fix broken node .execute() calls ───
+          path = 'android/app/build.gradle'
+          content = patch_file(path, 'hermesCommand fix')
+          if content:
+              original = content
+              lines = content.split('\n')
+              patched_hermes = False
+              for i, line in enumerate(lines):
+                  # Fix hermesCommand that resolves hermes-compiler via node
+                  if 'hermes-compiler' in line and ('hermesCommand' in line or 'hermes' in line.lower()):
+                      lines[i] = '    hermesCommand = "$projectRoot/node_modules/react-native/sdks/hermesc/%OS-BIN%/hermesc"'
+                      patched_hermes = True
+              content = '\n'.join(lines)
 
-          with open('android/build.gradle', 'w') as f:
-              f.write(content)
+              if patched_hermes:
+                  print(f"OK  {path}: replaced hermesCommand with bundled hermesc path")
+              else:
+                  # Check if hermesCommand exists at all — might already be fine
+                  if 'hermesCommand' in content:
+                      print(f"INFO {path}: hermesCommand exists but no hermes-compiler reference found (may already be OK)")
+                  else:
+                      print(f"INFO {path}: no hermesCommand found (RN plugin may handle it)")
 
-          print("Patch applied successfully")
+              # Diagnostic: show all remaining node .execute() calls
+              print(f"\n--- Remaining node .execute() calls in {path} ---")
+              for i, line in enumerate(lines, 1):
+                  if '.execute(' in line and 'node' in line:
+                      print(f"  L{i}: {line.strip()[:120]}")
+              print("--- end ---\n")
+
+              write_file(path, content)
+
+          if errors:
+              print(f"\nFATAL: {len(errors)} patch(es) failed:")
+              for e in errors:
+                  print(f"  - {e}")
+              sys.exit(1)
+
+          print("\nAll patches applied successfully.")
           PYEOF
 
-          echo "android/build.gradle allprojects.repositories after patch:"
-          grep -A 20 "allprojects" android/build.gradle | head -25
-
-      - name: Patch app/build.gradle — fix hermesCommand (hermes-compiler not in RN 0.79.x)
+      # ── Configure Gradle ──────────────────────────────────────────────
+      - name: Configure Gradle
         run: |
-          # expo prebuild generates a hermesCommand that tries to resolve 'hermes-compiler/package.json'
-          # via node, but that package does not exist in React Native 0.79.x.
-          # RN 0.79.x bundles hermesc directly in node_modules/react-native/sdks/hermesc/<OS-BIN>/.
-          # Replace the broken node-based lookup with the bundled hermesc path.
-          sed -i '/hermesCommand = new File.*hermes-compiler/c\    hermesCommand = "$projectRoot/node_modules/react-native/sdks/hermesc/%OS-BIN%/hermesc"' \
-            android/app/build.gradle
-          echo "hermesCommand after patch:"
-          grep "hermesCommand" android/app/build.gradle | head -3
+          chmod +x android/gradlew
 
-      - name: Make gradlew executable
-        run: chmod +x android/gradlew
+          # Global Gradle properties (affects included builds too)
+          mkdir -p ~/.gradle
+          cat > ~/.gradle/gradle.properties << 'EOF'
+          org.gradle.jvmargs=-Xmx6144m -XX:MaxMetaspaceSize=2048m -Dfile.encoding=UTF-8
+          kotlin.compiler.execution.strategy=in-process
+          org.gradle.java.installations.fromEnv=JAVA_HOME
+          org.gradle.java.installations.auto-download=false
+          EOF
 
-      - name: Configure Gradle properties for CI
-        run: |
-          # Ensure file ends with a newline before appending — expo prebuild may not add one,
-          # which causes the next echo to concatenate onto the last line (e.g. kotlinVersion=2.1.20org.gradle...)
+          # Project-level properties
           printf '\n' >> android/gradle.properties
-          echo "org.gradle.java.installations.fromEnv=JAVA_HOME" >> android/gradle.properties
-          echo "org.gradle.java.installations.auto-download=false" >> android/gradle.properties
           echo "org.gradle.jvmargs=-Xmx6144m -XX:MaxMetaspaceSize=2048m -Dfile.encoding=UTF-8" >> android/gradle.properties
           echo "kotlin.compiler.execution.strategy=in-process" >> android/gradle.properties
-          echo "--- android/gradle.properties ---"
-          cat android/gradle.properties
 
-      - name: Cache Gradle dependencies
+      - name: Cache Gradle
         uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
           key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            gradle-${{ runner.os }}-
+          restore-keys: gradle-${{ runner.os }}-
 
+      # ── Build ─────────────────────────────────────────────────────────
       - name: Build Release APK
         working-directory: android
         run: |
-          ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee gradle-build.log; BUILD_EXIT=${PIPESTATUS[0]}
+          ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee gradle-build.log
+          BUILD_EXIT=${PIPESTATUS[0]}
           if [ $BUILD_EXIT -ne 0 ]; then
-            echo "::error::Gradle build failed. Full error section:"
-            # Extract from FAILURE block to end of file (up to 150 lines)
-            grep -n "FAILURE\|What went wrong\|Caused by\|compileKotlin\|BUILD FAILED" gradle-build.log | tail -30 || true
-            echo "--- Last 80 lines of build log ---"
-            tail -80 gradle-build.log || true
+            echo ""
+            echo "=============================="
+            echo "  GRADLE BUILD FAILED"
+            echo "=============================="
+            echo ""
+            echo "--- Key error lines ---"
+            grep -n "FAILURE\|What went wrong\|Caused by\|BUILD FAILED\|Execution failed\|Process 'command\|Could not\|error:" gradle-build.log | tail -80 || true
+            echo ""
+            echo "--- Last 300 lines of build log ---"
+            tail -300 gradle-build.log || true
           fi
           exit $BUILD_EXIT
         env:
           JAVA_OPTS: "-Xmx6144m -XX:MaxMetaspaceSize=2048m"
 
-      - name: Sign APK (debug keystore for CI)
-        working-directory: android
-        run: |
-          # Generate a debug keystore if signing is needed
-          if [ ! -f "app/release.keystore" ]; then
-            keytool -genkey -v \
-              -keystore app/release.keystore \
-              -alias subflow \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -dname "CN=SubFlow, OU=Dev, O=SubFlow, L=Israel, S=Israel, C=IL" \
-              -storepass subflow123 \
-              -keypass subflow123 2>/dev/null || true
-          fi
-
-      - name: Get APK path
-        id: apk_path
-        run: |
-          APK_PATH=$(find android/app/build/outputs/apk -name "*.apk" | head -1)
-          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
-          echo "Found APK: $APK_PATH"
-
-      - name: Upload APK artifact
+      # ── Upload artifacts ──────────────────────────────────────────────
+      - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: SubFlow-APK-${{ github.sha }}
-          path: ${{ steps.apk_path.outputs.apk_path }}
+          path: android/app/build/outputs/apk/**/*.apk
           retention-days: 30
           if-no-files-found: warn
 
@@ -282,21 +267,3 @@ jobs:
             android/gradle-build.log
             android/app/build/reports/
           retention-days: 7
-
-  # Alternative EAS Build (uncomment if you have EAS account)
-  # eas-build:
-  #   name: EAS Build (APK)
-  #   runs-on: ubuntu-latest
-  #   if: github.ref == 'refs/heads/main'
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: actions/setup-node@v4
-  #       with:
-  #         node-version: '20'
-  #         cache: 'npm'
-  #     - run: npm ci
-  #     - run: npm install -g eas-cli
-  #     - name: Build with EAS
-  #       run: eas build --platform android --profile preview --non-interactive
-  #       env:
-  #         EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
