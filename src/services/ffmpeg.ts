@@ -50,7 +50,7 @@ export const extractAudio = async (
     });
   }
 
-  const command = `-i "${videoUri}" -vn -acodec aac -b:a 128k -ar 16000 -ac 1 -y "${outputPath}"`;
+  const command = `-i "${videoUri}" -vn -acodec aac -b:a 64k -ar 16000 -ac 1 -y "${outputPath}"`;
 
   const session = await FFmpegKit.execute(command);
   const returnCode = await session.getReturnCode();

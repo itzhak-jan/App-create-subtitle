@@ -1,7 +1,7 @@
 import { getInfoAsync, deleteAsync, type FileInfo } from 'expo-file-system/legacy';
 import { FFmpegKit, ReturnCode } from 'ffmpeg-kit-react-native';
 
-const MAX_CHUNK_SIZE_MB = 24; // Keep under 25MB limit
+const MAX_CHUNK_SIZE_MB = 8; // Gemini inline data limit ~10MB base64 // Keep under 25MB limit
 const MAX_CHUNK_SIZE_BYTES = MAX_CHUNK_SIZE_MB * 1024 * 1024;
 const OVERLAP_SECONDS = 2; // Overlap to avoid cutting mid-sentence
 
@@ -93,7 +93,7 @@ export const splitAudioIfNeeded = async (
 
     const chunkPath = `${tempDir}chunk_${chunkIndex}.aac`;
 
-    const command = `-i "${audioUri}" -ss ${currentStart} -t ${actualDuration} -acodec aac -b:a 128k -y "${chunkPath}"`;
+    const command = `-i "${audioUri}" -ss ${currentStart} -t ${actualDuration} -acodec aac -b:a 64k -y "${chunkPath}"`;
 
     await new Promise<void>((resolve, reject) => {
       FFmpegKit.execute(command).then(async (session) => {

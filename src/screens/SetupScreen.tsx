@@ -23,29 +23,22 @@ type Props = {
 };
 
 export default function SetupScreen({ navigation }: Props) {
-  const [openaiKey, setOpenaiKey] = useState('');
-  const [showOpenai, setShowOpenai] = useState(false);
+  const [geminiKey, setGeminiKey] = useState('');
+  const [showKey, setShowKey] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleSave = async () => {
-    if (!openaiKey.trim()) {
-      Alert.alert('שגיאה', 'אנא הכנס מפתח OpenAI API');
-      return;
-    }
-
-    if (!openaiKey.startsWith('sk-')) {
-      Alert.alert('שגיאה', 'מפתח OpenAI API חייב להתחיל ב-sk-');
+    const trimmed = geminiKey.trim();
+    if (!trimmed) {
+      Alert.alert('שגיאה', 'אנא הכנס מפתח Gemini API');
       return;
     }
 
     setLoading(true);
     try {
-      await saveApiKeys({
-        openaiApiKey: openaiKey.trim(),
-      });
-
+      await saveApiKeys({ geminiApiKey: trimmed });
       navigation.replace('Home');
-    } catch (error) {
+    } catch {
       Alert.alert('שגיאה', 'אירעה שגיאה בשמירת מפתח ה-API. נסה שנית.');
     } finally {
       setLoading(false);
@@ -59,7 +52,8 @@ export default function SetupScreen({ navigation }: Props) {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          {/* Logo / Header */}
+
+          {/* Header */}
           <View style={styles.header}>
             <View style={styles.logoContainer}>
               <Ionicons name="film" size={60} color="#e94560" />
@@ -68,58 +62,49 @@ export default function SetupScreen({ navigation }: Props) {
             <Text style={styles.subtitle}>אפליקציית כתוביות מתקדמת</Text>
           </View>
 
-          {/* Welcome Text */}
+          {/* Welcome */}
           <View style={styles.welcomeSection}>
-            <Text style={styles.welcomeTitle}>ברוך הבא! 👋</Text>
+            <Text style={styles.welcomeTitle}>ברוך הבא!</Text>
             <Text style={styles.welcomeText}>
-              SubFlow משתמשת ב-AI לתמלול ותרגום כתוביות אוטומטי.
+              SubFlow משתמשת ב-Gemini Flash לתמלול ותרגום כתוביות אוטומטי.
               {'\n\n'}
-              התמלול מתבצע דרך Whisper AI (OpenAI).{'\n'}
-              התרגום מתבצע on-device דרך Gemini Nano — בחינם, ללא אינטרנט.
+              מפתח Gemini API אחד מספיק לכל הפעולות.{'\n'}
+              יש תכנית חינמית עם 1,500 בקשות ביום.
             </Text>
           </View>
 
-          {/* Gemini Nano badge */}
-          <View style={styles.geminiNotice}>
-            <Ionicons name="phone-portrait" size={16} color="#4fc3f7" />
-            <Text style={styles.geminiText}>
-              תרגום Gemini Nano פועל ישירות על המכשיר — ללא עלויות API
+          {/* Info badge */}
+          <View style={styles.infoBadge}>
+            <Ionicons name="sparkles" size={16} color="#4fc3f7" />
+            <Text style={styles.infoText}>
+              תמלול ותרגום — הכל עם מפתח אחד, חינם עד 1,500 בקשות/יום
             </Text>
           </View>
 
-          {/* OpenAI Key */}
+          {/* Gemini API Key */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>מפתח OpenAI API</Text>
-              <TouchableOpacity
-                onPress={() => Linking.openURL('https://platform.openai.com/api-keys')}
-              >
-                <Text style={styles.helpLink}>קבל מפתח →</Text>
+              <Text style={styles.sectionTitle}>מפתח Gemini API</Text>
+              <TouchableOpacity onPress={() => Linking.openURL('https://aistudio.google.com/app/apikey')}>
+                <Text style={styles.helpLink}>קבל מפתח חינמי →</Text>
               </TouchableOpacity>
             </View>
             <Text style={styles.sectionDesc}>
-              משמש לתמלול השמע באמצעות Whisper AI
+              מ-Google AI Studio — חינמי, ללא צורך בכרטיס אשראי
             </Text>
             <View style={styles.inputContainer}>
               <TextInput
                 style={styles.input}
-                value={openaiKey}
-                onChangeText={setOpenaiKey}
-                placeholder="sk-..."
+                value={geminiKey}
+                onChangeText={setGeminiKey}
+                placeholder="AIza..."
                 placeholderTextColor="#8892a4"
-                secureTextEntry={!showOpenai}
+                secureTextEntry={!showKey}
                 autoCapitalize="none"
                 autoCorrect={false}
               />
-              <TouchableOpacity
-                style={styles.eyeButton}
-                onPress={() => setShowOpenai(!showOpenai)}
-              >
-                <Ionicons
-                  name={showOpenai ? 'eye-off' : 'eye'}
-                  size={20}
-                  color="#8892a4"
-                />
+              <TouchableOpacity style={styles.eyeButton} onPress={() => setShowKey(!showKey)}>
+                <Ionicons name={showKey ? 'eye-off' : 'eye'} size={20} color="#8892a4" />
               </TouchableOpacity>
             </View>
           </View>
@@ -142,6 +127,7 @@ export default function SetupScreen({ navigation }: Props) {
               {loading ? 'שומר...' : 'התחל להשתמש באפליקציה →'}
             </Text>
           </TouchableOpacity>
+
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -149,149 +135,49 @@ export default function SetupScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#1a1a2e',
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 24,
-    paddingBottom: 40,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 32,
-    marginTop: 20,
-  },
+  container: { flex: 1, backgroundColor: '#1a1a2e' },
+  keyboardView: { flex: 1 },
+  scrollContent: { padding: 24, paddingBottom: 40 },
+  header: { alignItems: 'center', marginBottom: 32, marginTop: 20 },
   logoContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#16213e',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-    borderWidth: 2,
-    borderColor: '#e94560',
+    width: 100, height: 100, borderRadius: 50,
+    backgroundColor: '#16213e', justifyContent: 'center', alignItems: 'center',
+    marginBottom: 16, borderWidth: 2, borderColor: '#e94560',
   },
-  title: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    letterSpacing: 2,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#8892a4',
-    marginTop: 4,
-  },
+  title: { fontSize: 36, fontWeight: 'bold', color: '#ffffff', letterSpacing: 2 },
+  subtitle: { fontSize: 14, color: '#8892a4', marginTop: 4 },
   welcomeSection: {
-    marginBottom: 16,
-    backgroundColor: '#16213e',
-    borderRadius: 12,
-    padding: 16,
+    marginBottom: 16, backgroundColor: '#16213e', borderRadius: 12, padding: 16,
   },
   welcomeTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 8,
-    textAlign: 'right',
+    fontSize: 18, fontWeight: 'bold', color: '#ffffff', marginBottom: 8, textAlign: 'right',
   },
-  welcomeText: {
-    fontSize: 14,
-    color: '#b0bec5',
-    lineHeight: 22,
-    textAlign: 'right',
+  welcomeText: { fontSize: 14, color: '#b0bec5', lineHeight: 22, textAlign: 'right' },
+  infoBadge: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#0d2b3e',
+    borderRadius: 8, padding: 12, marginBottom: 20, gap: 8,
+    borderWidth: 1, borderColor: '#1565c0',
   },
-  geminiNotice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0d2b3e',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 20,
-    gap: 8,
-    borderWidth: 1,
-    borderColor: '#1565c0',
-  },
-  geminiText: {
-    flex: 1,
-    fontSize: 12,
-    color: '#4fc3f7',
-    textAlign: 'right',
-  },
-  section: {
-    marginBottom: 20,
-  },
+  infoText: { flex: 1, fontSize: 12, color: '#4fc3f7', textAlign: 'right' },
+  section: { marginBottom: 20 },
   sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4,
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#ffffff',
-    textAlign: 'right',
-  },
-  helpLink: {
-    fontSize: 13,
-    color: '#e94560',
-  },
-  sectionDesc: {
-    fontSize: 12,
-    color: '#8892a4',
-    marginBottom: 8,
-    textAlign: 'right',
-  },
+  sectionTitle: { fontSize: 16, fontWeight: '600', color: '#ffffff' },
+  helpLink: { fontSize: 13, color: '#e94560' },
+  sectionDesc: { fontSize: 12, color: '#8892a4', marginBottom: 8, textAlign: 'right' },
   inputContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#16213e',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#0f3460',
-    alignItems: 'center',
+    flexDirection: 'row', backgroundColor: '#16213e', borderRadius: 10,
+    borderWidth: 1, borderColor: '#0f3460', alignItems: 'center',
   },
-  input: {
-    flex: 1,
-    padding: 14,
-    color: '#ffffff',
-    fontSize: 14,
-  },
-  eyeButton: {
-    padding: 14,
-  },
+  input: { flex: 1, padding: 14, color: '#ffffff', fontSize: 14 },
+  eyeButton: { padding: 14 },
   securityNotice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1b3a1b',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 24,
-    gap: 8,
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#1b3a1b',
+    borderRadius: 8, padding: 12, marginBottom: 24, gap: 8,
   },
-  securityText: {
-    flex: 1,
-    fontSize: 12,
-    color: '#81c784',
-    textAlign: 'right',
-  },
-  saveButton: {
-    backgroundColor: '#e94560',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-  },
-  saveButtonDisabled: {
-    opacity: 0.6,
-  },
-  saveButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
+  securityText: { flex: 1, fontSize: 12, color: '#81c784', textAlign: 'right' },
+  saveButton: { backgroundColor: '#e94560', borderRadius: 12, padding: 16, alignItems: 'center' },
+  saveButtonDisabled: { opacity: 0.6 },
+  saveButtonText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
 });

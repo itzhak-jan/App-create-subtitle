@@ -45,11 +45,10 @@ jobs:
 
       # ── Patch node_modules for known Kotlin version bugs ──────────────
       #
-      # Kotlin 2.0.21 has a "source must not be null" bug when java-gradle-plugin
-      # is used in an included build with Gradle 8.8+. Fixed in Kotlin 2.1.0+.
-      # We upgrade all occurrences to 2.1.20 to match the project's kotlinVersion.
+      # Kotlin 2.0.21 has a "source must not be null" bug with java-gradle-plugin
+      # in Gradle 8.8+. All three packages below ship 2.0.21 and must be patched.
       #
-      - name: Patch Kotlin versions in Gradle plugins (2.0.21 -> 2.1.20)
+      - name: Patch Kotlin versions in Gradle plugins (2.0.21 → 2.1.20)
         run: |
           # @react-native/gradle-plugin
           TOML="node_modules/@react-native/gradle-plugin/gradle/libs.versions.toml"
@@ -62,17 +61,21 @@ jobs:
 
           # expo-updates-gradle-plugin
           FILE="node_modules/expo-updates/expo-updates-gradle-plugin/build.gradle.kts"
-          [ -f "$FILE" ] && sed -i 's/kotlin("jvm") version("2.0.21")/kotlin("jvm") version("2.1.20")/' "$FILE" && echo "Patched expo-updates-gradle-plugin"
+          [ -f "$FILE" ] && \
+            sed -i 's/kotlin("jvm") version("2.0.21")/kotlin("jvm") version("2.1.20")/' "$FILE" && \
+            echo "Patched expo-updates-gradle-plugin"
 
-          # expo-modules-autolinking serialization plugin
+          # expo-modules-autolinking serialization plugin version must match compiler
           FILE="node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-plugin-shared/build.gradle.kts"
-          [ -f "$FILE" ] && sed -i 's/kotlin("plugin.serialization") version "1.9.24"/kotlin("plugin.serialization") version "2.1.20"/' "$FILE" && echo "Patched expo-autolinking serialization"
+          [ -f "$FILE" ] && \
+            sed -i 's/kotlin("plugin.serialization") version "1.9.24"/kotlin("plugin.serialization") version "2.1.20"/' "$FILE" && \
+            echo "Patched expo-autolinking serialization"
 
       # ── Build local Maven repo for ffmpeg-kit ─────────────────────────
       #
-      # arthenica/ffmpeg-kit was retired (June 2025). The original Maven artifact
-      # com.arthenica:ffmpeg-kit-https:6.0-2 was never published. We download the
-      # API-compatible community fork from Maven Central and serve it under the
+      # arthenica/ffmpeg-kit was retired June 2025. The Maven artifact
+      # com.arthenica:ffmpeg-kit-https:6.0-2 was never published to Maven Central.
+      # Download the API-compatible community fork and serve it under the
       # original coordinates so no JS-side patching is needed.
       #
       - name: Build local ffmpeg-kit Maven repo
@@ -99,7 +102,7 @@ jobs:
             </dependencies>
           </project>
           POMEOF
-          echo "Local Maven repo ready: $(ls -lh $DIR/*.aar | awk '{print $5, $NF}')"
+          echo "ffmpeg-kit local Maven ready: $(ls -lh $DIR | awk 'NR>1{print $5, $NF}')"
 
       # ── Expo prebuild ─────────────────────────────────────────────────
       - name: Generate native Android project
@@ -107,39 +110,41 @@ jobs:
         env:
           EXPO_NO_DOTENV: 1
 
-      # ── Patch ALL generated Gradle files in one shot ──────────────────
+      # ── Patch all generated Gradle files ─────────────────────────────
       #
       # expo prebuild generates android/build.gradle and android/app/build.gradle
-      # with several issues that must be fixed before Gradle can run:
+      # with issues that must be fixed before Gradle can run:
       #
-      #   1. Missing Maven repos for async-storage local_repo and ffmpeg-kit
-      #   2. Broken hermesCommand that calls node to resolve 'hermes-compiler'
-      #      (doesn't exist in RN 0.79.x — hermesc is bundled in react-native/sdks/)
+      #   1. android/build.gradle — Missing Maven repos:
+      #      - async-storage ships its own local_repo with storage-android artifact
+      #      - ffmpeg-kit needs our custom local Maven repo (arthenica retired)
       #
-      # We use a single Python script to patch everything reliably.
+      #   2. android/app/build.gradle — Broken hermesCommand:
+      #      Generated code calls node to resolve 'hermes-compiler/package.json',
+      #      which doesn't exist in React Native 0.79.x. hermesc is bundled directly
+      #      in node_modules/react-native/sdks/hermesc/<OS-BIN>/.
       #
       - name: Patch generated Gradle files
         run: |
           python3 << 'PYEOF'
           import re, os, sys
 
-          def patch_file(path, description):
-              """Read a file, return its content, and print a header."""
+          def read(path):
               if not os.path.exists(path):
-                  print(f"WARNING: {path} not found — skipping {description}")
+                  print(f"WARNING: {path} not found — skipping")
                   return None
               with open(path, 'r') as f:
                   return f.read()
 
-          def write_file(path, content):
+          def write(path, content):
               with open(path, 'w') as f:
                   f.write(content)
 
           errors = []
 
-          # ─── 1. android/build.gradle: add custom Maven repositories ───
+          # 1. android/build.gradle — inject custom Maven repositories
           path = 'android/build.gradle'
-          content = patch_file(path, 'Maven repo injection')
+          content = read(path)
           if content:
               marker = "maven { url 'https://www.jitpack.io' }"
               extra = """
@@ -150,52 +155,41 @@ jobs:
                   url 'file:///tmp/ffmpeg-local-maven'
               }"""
               if marker in content:
-                  content = content.replace(marker, marker + extra, 1)
-                  write_file(path, content)
-                  print(f"OK  {path}: added async-storage + ffmpeg-kit Maven repos")
+                  write(path, content.replace(marker, marker + extra, 1))
+                  print(f"OK  {path}: injected Maven repos")
               else:
-                  errors.append(f"{path}: could not find jitpack marker to inject repos")
-                  print(f"ERR {path}: jitpack marker not found")
+                  errors.append(f"{path}: jitpack marker not found")
 
-          # ─── 2. android/app/build.gradle: fix broken node .execute() calls ───
+          # 2. android/app/build.gradle — fix broken hermesCommand
           path = 'android/app/build.gradle'
-          content = patch_file(path, 'hermesCommand fix')
+          content = read(path)
           if content:
-              original = content
               lines = content.split('\n')
-              patched_hermes = False
+              patched = False
               for i, line in enumerate(lines):
-                  # Fix hermesCommand that resolves hermes-compiler via node
-                  if 'hermes-compiler' in line and ('hermesCommand' in line or 'hermes' in line.lower()):
+                  if 'hermes-compiler' in line:
                       lines[i] = '    hermesCommand = "$projectRoot/node_modules/react-native/sdks/hermesc/%OS-BIN%/hermesc"'
-                      patched_hermes = True
-              content = '\n'.join(lines)
-
-              if patched_hermes:
-                  print(f"OK  {path}: replaced hermesCommand with bundled hermesc path")
-              else:
-                  # Check if hermesCommand exists at all — might already be fine
+                      patched = True
+                      print(f"OK  {path}: replaced hermesCommand (line {i+1})")
+              if not patched:
                   if 'hermesCommand' in content:
-                      print(f"INFO {path}: hermesCommand exists but no hermes-compiler reference found (may already be OK)")
+                      print(f"INFO {path}: hermesCommand found but no hermes-compiler reference (may be OK)")
                   else:
-                      print(f"INFO {path}: no hermesCommand found (RN plugin may handle it)")
+                      print(f"INFO {path}: no hermesCommand found (may be handled by RN plugin)")
+              write(path, '\n'.join(lines))
 
-              # Diagnostic: show all remaining node .execute() calls
-              print(f"\n--- Remaining node .execute() calls in {path} ---")
-              for i, line in enumerate(lines, 1):
-                  if '.execute(' in line and 'node' in line:
-                      print(f"  L{i}: {line.strip()[:120]}")
-              print("--- end ---\n")
-
-              write_file(path, content)
+              # Diagnostic: show remaining node .execute() calls
+              remaining = [(i+1, l.strip()) for i, l in enumerate(lines) if '.execute(' in l and 'node' in l]
+              if remaining:
+                  print(f"\n  Remaining node .execute() calls in {path}:")
+                  for lineno, line in remaining:
+                      print(f"    L{lineno}: {line[:120]}")
 
           if errors:
-              print(f"\nFATAL: {len(errors)} patch(es) failed:")
-              for e in errors:
-                  print(f"  - {e}")
+              for e in errors: print(f"FATAL: {e}")
               sys.exit(1)
 
-          print("\nAll patches applied successfully.")
+          print("\nAll patches applied.")
           PYEOF
 
       # ── Configure Gradle ──────────────────────────────────────────────
@@ -203,7 +197,6 @@ jobs:
         run: |
           chmod +x android/gradlew
 
-          # Global Gradle properties (affects included builds too)
           mkdir -p ~/.gradle
           cat > ~/.gradle/gradle.properties << 'EOF'
           org.gradle.jvmargs=-Xmx6144m -XX:MaxMetaspaceSize=2048m -Dfile.encoding=UTF-8
@@ -212,7 +205,6 @@ jobs:
           org.gradle.java.installations.auto-download=false
           EOF
 
-          # Project-level properties
           printf '\n' >> android/gradle.properties
           echo "org.gradle.jvmargs=-Xmx6144m -XX:MaxMetaspaceSize=2048m -Dfile.encoding=UTF-8" >> android/gradle.properties
           echo "kotlin.compiler.execution.strategy=in-process" >> android/gradle.properties
@@ -239,7 +231,8 @@ jobs:
             echo "=============================="
             echo ""
             echo "--- Key error lines ---"
-            grep -n "FAILURE\|What went wrong\|Caused by\|BUILD FAILED\|Execution failed\|Process 'command\|Could not\|error:" gradle-build.log | tail -80 || true
+            grep -n "FAILURE\|What went wrong\|Caused by\|BUILD FAILED\|Execution failed\|Process 'command\|Could not\|error:" \
+              gradle-build.log | tail -80 || true
             echo ""
             echo "--- Last 300 lines of build log ---"
             tail -300 gradle-build.log || true
@@ -248,7 +241,7 @@ jobs:
         env:
           JAVA_OPTS: "-Xmx6144m -XX:MaxMetaspaceSize=2048m"
 
-      # ── Upload artifacts ──────────────────────────────────────────────
+      # ── Artifacts ─────────────────────────────────────────────────────
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4

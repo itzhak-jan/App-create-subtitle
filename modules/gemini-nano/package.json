@@ -1,9 +1,0 @@
-{
-  "name": "gemini-nano",
-  "version": "1.0.0",
-  "description": "Local Expo module for on-device translation using Gemini Nano (Android AI Core)",
-  "main": "index.ts",
-  "peerDependencies": {
-    "expo-modules-core": "*"
-  }
-}
