@@ -71,6 +71,30 @@ jobs:
             sed -i 's/kotlin("plugin.serialization") version "1.9.24"/kotlin("plugin.serialization") version "2.1.20"/' "$FILE" && \
             echo "Patched expo-autolinking serialization"
 
+      # ── Patch react-native-screens codegen type bug ───────────────────
+      #
+      # RN 0.79.x codegen TypeScript parser cannot resolve namespace-qualified
+      # types such as CT.WithDefault<boolean, true> and returns `undefined`,
+      # causing: "Unknown prop type for accessibilityContainerViewIsModal: undefined"
+      #
+      # File: node_modules/react-native-screens/src/fabric/FullWindowOverlayNativeComponent.ts
+      # Fix: replace CT.WithDefault<boolean, true> with plain `boolean` so the
+      #      codegen parser can resolve the type successfully.
+      #
+      - name: Patch react-native-screens codegen type
+        run: |
+          FILE="node_modules/react-native-screens/src/fabric/FullWindowOverlayNativeComponent.ts"
+          if [ -f "$FILE" ]; then
+            # Remove the unresolvable CodegenTypes namespace import
+            sed -i "s/import type { CodegenTypes as CT, ViewProps } from 'react-native';/import type { ViewProps } from 'react-native';/" "$FILE"
+            # Replace CT.WithDefault<boolean, true> with plain boolean
+            sed -i 's/CT\.WithDefault<boolean, *true>/boolean/g' "$FILE"
+            echo "Patched $FILE:"
+            head -12 "$FILE"
+          else
+            echo "WARNING: $FILE not found — skipping patch"
+          fi
+
       # ── Build local Maven repo for ffmpeg-kit ─────────────────────────
       #
       # arthenica/ffmpeg-kit was retired June 2025. The Maven artifact
