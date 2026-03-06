@@ -32,7 +32,7 @@ jobs:
       - name: Accept licenses and install NDK
         run: |
           yes | sdkmanager --licenses || true
-          sdkmanager "ndk;27.1.12297006" "cmake;3.22.1"
+          sdkmanager "ndk;27.1.12297006" "cmake;3.22.1" "platforms;android-36"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.1.12297006" >> $GITHUB_ENV
 
       - name: Free disk space
@@ -216,7 +216,24 @@ jobs:
               else:
                   errors.append(f"{path}: jitpack marker not found")
 
-          # 2. android/app/build.gradle — fix broken hermesCommand
+          # 2. android/build.gradle — bump compileSdk to 36 and AGP to 8.9.1
+          #
+          # androidx.core:1.17.0 and androidx.activity:1.11.0 (transitive deps)
+          # require compileSdk >= 36 AND AGP >= 8.9.1. Bump both here.
+          #
+          path = 'android/build.gradle'
+          content = read(path)
+          if content:
+              updated = re.sub(r'compileSdkVersion\s*=\s*35', 'compileSdkVersion = 36', content)
+              updated = re.sub(r'com\.android\.tools\.build:gradle:[0-9.]+',
+                               'com.android.tools.build:gradle:8.9.1', updated)
+              if updated != content:
+                  write(path, updated)
+                  print(f"OK  {path}: compileSdk → 36, AGP → 8.9.1")
+              else:
+                  print(f"INFO {path}: compileSdk/AGP patterns not found (may already be correct)")
+
+          # 3. android/app/build.gradle — fix broken hermesCommand
           path = 'android/app/build.gradle'
           content = read(path)
           if content:
