@@ -216,36 +216,39 @@ jobs:
               else:
                   errors.append(f"{path}: jitpack marker not found")
 
-          # 2. android/build.gradle — bump compileSdk to 36 and AGP to 8.9.1
+          # 2. android/build.gradle — inject resolution strategy to force compatible
+          #    androidx versions.
           #
-          # androidx.core:1.17.0 and androidx.activity:1.11.0 (transitive deps)
-          # require compileSdk >= 36 AND AGP >= 8.9.1. Bump both here.
-          #
-          # NOTE: expo prebuild may generate either `compileSdk = 35` or
-          # `compileSdkVersion = 35`; patch both forms.
+          # androidx.core:1.17.0 and androidx.activity:1.11.0 (transitive deps of
+          # some RN packages) embed AAR metadata requiring compileSdk >= 36 and
+          # AGP >= 8.9.1. Rather than bumping those (which is fragile because expo
+          # prebuild writes them in an unpredictable format), we force-pin to the
+          # last releases that carry no such constraints.
           #
           path = 'android/build.gradle'
           content = read(path)
           if content:
-              updated = content
-              # Handle both `compileSdk = 35` and `compileSdkVersion = 35`
-              updated = re.sub(r'\bcompileSdkVersion\s*=\s*35\b', 'compileSdkVersion = 36', updated)
-              updated = re.sub(r'\bcompileSdk\s*=\s*35\b', 'compileSdk = 36', updated)
-              # Bump AGP classpath version
-              updated = re.sub(r'com\.android\.tools\.build:gradle:[0-9.]+',
-                               'com.android.tools.build:gradle:8.9.1', updated)
-              if updated != content:
-                  write(path, updated)
-                  # Show what was actually set so we can verify in CI logs
-                  for line in updated.split('\n'):
-                      if 'compileSdk' in line or 'tools.build:gradle' in line:
-                          print(f"  → {line.strip()}")
-                  print(f"OK  {path}: compileSdk → 36, AGP → 8.9.1")
-              else:
-                  print(f"WARNING {path}: no compileSdk/AGP patterns matched — check generated file")
-                  # Print first 40 lines for debugging
-                  for i, l in enumerate(content.split('\n')[:40], 1):
-                      print(f"  {i:3}: {l}")
+              # Print first 30 lines so we can see the exact generated format in logs
+              print(f"--- First 30 lines of {path} ---")
+              for i, l in enumerate(content.split('\n')[:30], 1):
+                  print(f"  {i:3}: {l}")
+              print(f"--- end ---")
+
+              resolution_block = """
+// ── Injected by CI: force-pin androidx to versions with no compileSdk/AGP constraints ──
+allprojects {
+    configurations.all {
+        resolutionStrategy {
+            force 'androidx.core:core:1.15.0'
+            force 'androidx.core:core-ktx:1.15.0'
+            force 'androidx.activity:activity:1.9.3'
+            force 'androidx.activity:activity-ktx:1.9.3'
+        }
+    }
+}
+"""
+              write(path, content + resolution_block)
+              print(f"OK  {path}: injected androidx resolution strategy")
 
           # 3. android/app/build.gradle — fix broken hermesCommand
           path = 'android/app/build.gradle'
