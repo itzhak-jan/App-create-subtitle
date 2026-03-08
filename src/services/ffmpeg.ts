@@ -79,7 +79,7 @@ export const burnSubtitles = async (
   videoUri: string,
   srtPath: string,
   outputDir: string,
-  isRTL: boolean = true,
+  _isRTL: boolean = true,
   onProgress?: FFmpegProgressCallback
 ): Promise<string> => {
   const outputPath = `${outputDir}output_with_subtitles.mp4`;
@@ -162,42 +162,39 @@ export const getVideoInfo = async (videoUri: string): Promise<{
   height: number;
   size: number;
 }> => {
-  return new Promise(async (resolve, _reject) => {
-    const info = await getInfoAsync(videoUri);
-    const size = (info as FileInfo & { size?: number }).size || 0;
+  const info = await getInfoAsync(videoUri);
+  const size = (info as FileInfo & { size?: number }).size || 0;
 
-    const command = `-i "${videoUri}" -v quiet -print_format json -show_streams -show_format`;
-    const session = await FFmpegKit.execute(command);
-    const output = await session.getOutput();
+  const command = `-i "${videoUri}" -v quiet -print_format json -show_streams -show_format`;
+  const session = await FFmpegKit.execute(command);
 
-    let duration = 0;
-    let width = 0;
-    let height = 0;
+  let duration = 0;
+  let width = 0;
+  let height = 0;
 
-    try {
-      // Parse from logs
-      const logs = await session.getAllLogs();
-      const logText = logs.map((l) => l.getMessage()).join('\n');
+  try {
+    // Parse from logs
+    const logs = await session.getAllLogs();
+    const logText = logs.map((l) => l.getMessage()).join('\n');
 
-      const durationMatch = logText.match(/Duration: (\d+):(\d+):(\d+)\.(\d+)/);
-      if (durationMatch) {
-        const h = parseInt(durationMatch[1], 10);
-        const m = parseInt(durationMatch[2], 10);
-        const s = parseInt(durationMatch[3], 10);
-        duration = h * 3600 + m * 60 + s;
-      }
-
-      const streamMatch = logText.match(/(\d{3,4})x(\d{3,4})/);
-      if (streamMatch) {
-        width = parseInt(streamMatch[1], 10);
-        height = parseInt(streamMatch[2], 10);
-      }
-    } catch {
-      // Use defaults
+    const durationMatch = logText.match(/Duration: (\d+):(\d+):(\d+)\.(\d+)/);
+    if (durationMatch) {
+      const h = parseInt(durationMatch[1], 10);
+      const m = parseInt(durationMatch[2], 10);
+      const s = parseInt(durationMatch[3], 10);
+      duration = h * 3600 + m * 60 + s;
     }
 
-    resolve({ duration, width, height, size });
-  });
+    const streamMatch = logText.match(/(\d{3,4})x(\d{3,4})/);
+    if (streamMatch) {
+      width = parseInt(streamMatch[1], 10);
+      height = parseInt(streamMatch[2], 10);
+    }
+  } catch {
+    // Use defaults
+  }
+
+  return { duration, width, height, size };
 };
 
 /**
