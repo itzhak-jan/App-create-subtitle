@@ -1,4 +1,4 @@
-import { readAsStringAsync, getInfoAsync, type FileInfo } from 'expo-file-system/legacy';
+import { readAsStringAsync } from 'expo-file-system/legacy';
 import { SRTEntry } from '../types';
 import { parseSRT, chunkSRTEntries, serializeSRT, adjustSRTTimestamps, mergeSRTChunks } from '../utils/srt-parser';
 import { AudioChunk } from '../utils/audio-chunker';

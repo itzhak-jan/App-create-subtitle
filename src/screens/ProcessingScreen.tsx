@@ -22,12 +22,14 @@ type Props = {
   route: RouteProp<RootStackParamList, 'Processing'>;
 };
 
-const STATUS_ICONS: Record<ProcessingStatus, string> = {
+type IconName = React.ComponentProps<typeof Ionicons>['name'];
+
+const STATUS_ICONS: Record<ProcessingStatus, IconName> = {
   idle: 'hourglass-outline',
   extracting_audio: 'musical-notes-outline',
   transcribing: 'mic-outline',
   translating: 'language-outline',
-  embedding_subtitles: 'closed-captioning-outline',
+  embedding_subtitles: 'logo-closed-captioning',
   completed: 'checkmark-circle',
   error: 'alert-circle',
   cancelled: 'close-circle',
@@ -44,11 +46,11 @@ const STATUS_COLORS: Record<ProcessingStatus, string> = {
   cancelled: '#FF9800',
 };
 
-const STEP_LABELS: Record<string, { icon: string; label: string; range: [number, number] }> = {
+const STEP_LABELS: Record<string, { icon: IconName; label: string; range: [number, number] }> = {
   extracting_audio: { icon: 'musical-notes', label: 'חילוץ שמע', range: [5, 25] },
   transcribing: { icon: 'mic', label: 'תמלול', range: [25, 55] },
   translating: { icon: 'language', label: 'תרגום', range: [55, 80] },
-  embedding_subtitles: { icon: 'closed-captioning', label: 'הטמעת כתוביות', range: [80, 100] },
+  embedding_subtitles: { icon: 'logo-closed-captioning', label: 'הטמעת כתוביות', range: [80, 100] },
 };
 
 export default function ProcessingScreen({ navigation }: Props) {
@@ -83,6 +85,8 @@ export default function ProcessingScreen({ navigation }: Props) {
       pulse.stop();
       rotate.stop();
     };
+  // pulseAnim/rotateAnim are stable refs; we only want to restart animations when status changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentJob?.status]);
 
   const handleCancel = () => {
@@ -171,12 +175,12 @@ export default function ProcessingScreen({ navigation }: Props) {
               ]}
             >
               <Animated.View style={{ transform: [{ rotate: spin }] }}>
-                <Ionicons name={statusIcon as any} size={60} color={statusColor} />
+                <Ionicons name={statusIcon} size={60} color={statusColor} />
               </Animated.View>
             </Animated.View>
           ) : (
             <View style={[styles.iconCircle, { borderColor: statusColor }]}>
-              <Ionicons name={statusIcon as any} size={60} color={statusColor} />
+              <Ionicons name={statusIcon} size={60} color={statusColor} />
             </View>
           )}
         </View>
@@ -211,7 +215,6 @@ export default function ProcessingScreen({ navigation }: Props) {
 
             const isDone = stepIdx < currentIdx || isCompleted;
             const isCurrentStep = stepIdx === currentIdx && isActive;
-            const isPending = stepIdx > currentIdx && !isCompleted;
 
             const stepColor = isDone ? '#4CAF50' : isCurrentStep ? statusColor : '#8892a4';
 
@@ -221,7 +224,7 @@ export default function ProcessingScreen({ navigation }: Props) {
                   {isDone ? (
                     <Ionicons name="checkmark" size={18} color="#4CAF50" />
                   ) : (
-                    <Ionicons name={step.icon as any} size={18} color={stepColor} />
+                    <Ionicons name={step.icon} size={18} color={stepColor} />
                   )}
                 </View>
                 <Text style={[styles.stepLabel, { color: stepColor, fontWeight: isCurrentStep ? 'bold' : 'normal' }]}>

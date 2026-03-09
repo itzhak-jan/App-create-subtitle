@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
 import * as MediaLibrary from 'expo-media-library';
 
-import { ProcessingJob, ProcessingStatus } from '../types';
+import { ProcessingJob } from '../types';
 import { extractAudio, burnSubtitles, createTempDir, resetCancellation, cancelProcessing } from '../services/ffmpeg';
 import { splitAudioIfNeeded, cleanupChunks } from '../utils/audio-chunker';
 import { transcribeAudio, translateSRT } from '../services/gemini';

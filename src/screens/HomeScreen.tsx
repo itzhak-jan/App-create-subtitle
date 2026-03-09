@@ -7,7 +7,6 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
-  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
@@ -18,7 +17,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { RootStackParamList, SUPPORTED_LANGUAGES, SOURCE_LANGUAGES, ProcessingJob } from '../types';
-import { getApiKeys, getSettings, saveSettings } from '../services/storage';
+import { getApiKeys, saveSettings } from '../services/storage';
 import { getVideoInfo } from '../services/ffmpeg';
 import { useProcessing } from '../context/ProcessingContext';
 import LanguagePicker from '../components/LanguagePicker';
@@ -87,7 +86,7 @@ export default function HomeScreen() {
           setLoading(false);
         }
       }
-    } catch (error) {
+    } catch {
       Alert.alert('שגיאה', 'לא ניתן לבחור סרטון מהגלריה');
     }
   }, []);
@@ -123,7 +122,7 @@ export default function HomeScreen() {
           setLoading(false);
         }
       }
-    } catch (error) {
+    } catch {
       Alert.alert('שגיאה', 'לא ניתן לבחור קובץ');
     }
   }, []);
@@ -304,17 +303,19 @@ export default function HomeScreen() {
         {/* Steps Info */}
         <View style={styles.stepsSection}>
           <Text style={styles.stepsTitle}>כיצד זה עובד:</Text>
-          {[
+          {(
+          [
             { icon: 'musical-notes', text: 'חילוץ שמע מהסרטון' },
             { icon: 'mic', text: 'תמלול באמצעות Whisper AI' },
             { icon: 'language', text: 'תרגום באמצעות Claude AI' },
-            { icon: 'closed-captioning', text: 'הטמעת כתוביות בסרטון' },
-          ].map((step, idx) => (
+            { icon: 'logo-closed-captioning', text: 'הטמעת כתוביות בסרטון' },
+          ] as Array<{ icon: React.ComponentProps<typeof Ionicons>['name']; text: string }>
+        ).map((step, idx) => (
             <View key={idx} style={styles.stepItem}>
               <View style={styles.stepNumber}>
                 <Text style={styles.stepNumberText}>{idx + 1}</Text>
               </View>
-              <Ionicons name={step.icon as any} size={18} color="#e94560" />
+              <Ionicons name={step.icon} size={18} color="#e94560" />
               <Text style={styles.stepText}>{step.text}</Text>
             </View>
           ))}

@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   Alert,
   Share,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
@@ -23,8 +22,8 @@ type Props = {
   route: RouteProp<RootStackParamList, 'VideoPreview'>;
 };
 
-export default function VideoPreviewScreen({ navigation, route }: Props) {
-  const { videoUri, jobId } = route.params;
+export default function VideoPreviewScreen({ route }: Props) {
+  const { videoUri } = route.params;
   const videoRef = useRef<Video>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [status, setStatus] = useState<AVPlaybackStatus | null>(null);
@@ -53,7 +52,7 @@ export default function VideoPreviewScreen({ navigation, route }: Props) {
 
       await MediaLibrary.saveToLibraryAsync(videoUri);
       Alert.alert('הצלחה! ✅', 'הסרטון נשמר לגלריה');
-    } catch (error) {
+    } catch {
       Alert.alert('שגיאה', 'לא ניתן לשמור את הסרטון לגלריה');
     } finally {
       setIsSaving(false);
