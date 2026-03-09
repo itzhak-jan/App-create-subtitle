@@ -234,19 +234,20 @@ jobs:
                   print(f"  {i:3}: {l}")
               print(f"--- end ---")
 
-              resolution_block = """
-// ── Injected by CI: force-pin androidx to versions with no compileSdk/AGP constraints ──
-allprojects {
-    configurations.all {
-        resolutionStrategy {
-            force 'androidx.core:core:1.15.0'
-            force 'androidx.core:core-ktx:1.15.0'
-            force 'androidx.activity:activity:1.9.3'
-            force 'androidx.activity:activity-ktx:1.9.3'
-        }
-    }
-}
-"""
+              resolution_block = (
+                  '\n'
+                  '// CI: force-pin androidx to versions with no compileSdk/AGP constraints\n'
+                  'allprojects {\n'
+                  '    configurations.all {\n'
+                  '        resolutionStrategy {\n'
+                  "            force 'androidx.core:core:1.15.0'\n"
+                  "            force 'androidx.core:core-ktx:1.15.0'\n"
+                  "            force 'androidx.activity:activity:1.9.3'\n"
+                  "            force 'androidx.activity:activity-ktx:1.9.3'\n"
+                  '        }\n'
+                  '    }\n'
+                  '}\n'
+              )
               write(path, content + resolution_block)
               print(f"OK  {path}: injected androidx resolution strategy")
 
