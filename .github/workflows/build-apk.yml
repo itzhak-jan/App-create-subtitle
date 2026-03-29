@@ -138,30 +138,20 @@ jobs:
       #
       - name: Patch ReactStylesDiffMapBackingFieldAccessor for RN 0.79
         run: |
-          FILE="node_modules/expo-modules-core/android/src/main/java/com/facebook/react/uimanager/ReactStylesDiffMapBackingFieldAccessor.java"
-          if [ -f "$FILE" ]; then
-            cat > "$FILE" << 'JAVAEOF'
-package com.facebook.react.uimanager;
-
-import com.facebook.react.bridge.ReadableMap;
-import java.lang.reflect.Field;
-
-public class ReactStylesDiffMapBackingFieldAccessor {
-  static ReadableMap getBackingMap(ReactStylesDiffMap diffMap) {
-    try {
-      Field f = ReactStylesDiffMap.class.getDeclaredField("mBackingMap");
-      f.setAccessible(true);
-      return (ReadableMap) f.get(diffMap);
-    } catch (Exception e) {
-      throw new RuntimeException("Cannot access ReactStylesDiffMap.mBackingMap", e);
-    }
-  }
-}
-JAVAEOF
-            echo "Patched $FILE"
-          else
-            echo "File not found, skipping patch"
-          fi
+          python3 -c "
+          import os
+          f = 'node_modules/expo-modules-core/android/src/main/java/com/facebook/react/uimanager/ReactStylesDiffMapBackingFieldAccessor.java'
+          if not os.path.exists(f):
+              print('File not found, skipping')
+          else:
+              txt = open(f).read()
+              patched = txt.replace(
+                  'return diffMap.internal_backingMap();',
+                  'try { java.lang.reflect.Field fld = ReactStylesDiffMap.class.getDeclaredField(\"mBackingMap\"); fld.setAccessible(true); return (com.facebook.react.bridge.ReadableMap) fld.get(diffMap); } catch (Exception ex) { throw new RuntimeException(ex); }'
+              )
+              open(f, 'w').write(patched)
+              print('Patched:', f)
+          "
 
       # ── Build local Maven repo for ffmpeg-kit ─────────────────────────
       #
